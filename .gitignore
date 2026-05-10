@@ -30,3 +30,9 @@ Thumbs.db
 # Editors/IDE
 .vscode/
 .idea/
+
+# Local backup of the old backend repo metadata
+backend_git_backup/
+
+backend/node_modules/
+backend/.env
