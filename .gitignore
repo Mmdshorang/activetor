@@ -1,7 +1,6 @@
 # Dependencies
 node_modules/
 frontend/node_modules/
-backend/node_modules/
 
 # Build outputs
 build/
@@ -13,8 +12,7 @@ frontend/build/
 .env
 .env.*
 !.env.example
-backend/.env
-backend/.env.*
+
 frontend/.env
 frontend/.env.*
 
