@@ -363,7 +363,7 @@ export default function Licenses() {
                   value={form.systemName}
                   onChange={handleChange}
                   className="panel-input"
-                  placeholder="مثال: Shaboof Core"
+                  placeholder="مثال: سامانه مدیریت"
                 />
               </div>
 
