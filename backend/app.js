@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+require("dotenv").config();
 const db = require("./models");
 
 const statsRoutes = require("./routes/stats.routes");
@@ -8,6 +9,7 @@ const contractRoutes = require("./routes/contract.routes");
 const renewalRequestRoutes = require("./routes/renewal-request.routes");
 
 const app = express();
+const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
@@ -29,8 +31,8 @@ db.sequelize
   .then(() => {
     console.log("🟢 Database synced successfully");
 
-    app.listen(5000, () => {
-      console.log("🚀 Server running on http://localhost:5000");
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`🚀 Server running on port ${PORT}`);
     });
   })
   .catch((err) => {
