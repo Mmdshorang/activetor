@@ -124,7 +124,7 @@ export default function Versions() {
           افزودن نسخه جدید
         </h2>
         <form onSubmit={addVersion} className="flex flex-col sm:flex-row gap-3">
-          <input type="text"  dir="ltr" value={newName} onChange={(e) => setNewName(e.target.value)} className="panel-input flex-1" placeholder="مثال: v1.2.0" />
+          <input type="text"  value={newName} onChange={(e) => setNewName(e.target.value)} className="panel-input flex-1" placeholder="مثال: v1.2.0" />
           <button type="submit" disabled={loading || !newName.trim()} className="panel-btn-primary sm:min-w-36">
             {loading ? <Loader2 className="animate-spin" size={16} /> : <Plus size={16} />}
             افزودن

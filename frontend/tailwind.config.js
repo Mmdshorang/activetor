@@ -3,8 +3,8 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Vazirmatn", "Tahoma", "sans-serif"],
-        display: ["Outfit", "Vazirmatn", "sans-serif"],
+        sans: ["Yekan", "Tahoma", "sans-serif"],
+        display: ["Outfit", "Yekan", "sans-serif"],
       },
       keyframes: {
         floaty: {
