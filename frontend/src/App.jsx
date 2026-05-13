@@ -46,7 +46,7 @@ export default function App() {
         >
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="users" element={<RoleRoute allowedRoles={["admin", "user"]}><Users /></RoleRoute>} />
-          <Route path="customers" element={<RoleRoute allowedRoles={["admin", "user"]}><Customers /></RoleRoute>} />
+          <Route path="customers" element={<RoleRoute allowedRoles={["admin", "user","agent"]}><Customers /></RoleRoute>} />
           <Route path="versions" element={<RoleRoute allowedRoles={["admin", "user"]}><Versions /></RoleRoute>} />
           <Route path="messages" element={<Messages />} />
           <Route path="licenses" element={<RoleRoute allowedRoles={["admin", "user", "customer"]}><Licenses /></RoleRoute>} />

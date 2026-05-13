@@ -1,7 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import moment from "jalali-moment";
-import { CalendarDays, Edit2, FileText, Loader2, Plus, Search, Trash2, CheckCircle2, AlertCircle } from "lucide-react";
+import {
+  CalendarDays,
+  Edit2,
+  FileText,
+  Loader2,
+  Plus,
+  Search,
+  Trash2,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
 import JalaliDatePicker from "../components/DatePicker";
 import api from "../services/api";
 import { getAuthUser } from "../utils/auth";
@@ -11,7 +21,8 @@ import OverflowTooltip from "../components/OverflowTooltip";
 const toGregorianDate = (jalaliOrDate) => {
   if (!jalaliOrDate) return null;
   const jalaliParsed = moment(jalaliOrDate, "jYYYY/jMM/jDD", true);
-  if (jalaliParsed.isValid()) return jalaliParsed.locale("en").format("YYYY-MM-DD");
+  if (jalaliParsed.isValid())
+    return jalaliParsed.locale("en").format("YYYY-MM-DD");
   const normalParsed = moment(jalaliOrDate);
   return normalParsed.isValid() ? normalParsed.format("YYYY-MM-DD") : null;
 };
@@ -22,7 +33,8 @@ const toJalaliDate = (dateValue) => {
   return parsed.isValid() ? parsed.locale("fa").format("jYYYY/jMM/jDD") : null;
 };
 
-const formatAmount = (value) => `${Number(value || 0).toLocaleString("fa-IR")} تومان`;
+const formatAmount = (value) =>
+  `${Number(value || 0).toLocaleString("fa-IR")} تومان`;
 
 export default function Contracts() {
   const [searchParams] = useSearchParams();
@@ -125,7 +137,13 @@ export default function Contracts() {
 
   const saveContract = async (e) => {
     e.preventDefault();
-    if (!form.title || !form.amount || !form.startDate || !form.endDate || !form.customerId) {
+    if (
+      !form.title ||
+      !form.amount ||
+      !form.startDate ||
+      !form.endDate ||
+      !form.customerId
+    ) {
       setError("عنوان، مشتری، مبلغ و تاریخ ها الزامی است.");
       return;
     }
@@ -178,15 +196,27 @@ export default function Contracts() {
       const title = item.title?.toLowerCase() || "";
       const customer = item.customer?.fullName?.toLowerCase() || "";
       const creator = item.creator?.fullName?.toLowerCase() || "";
-      return title.includes(term) || customer.includes(term) || creator.includes(term);
+      return (
+        title.includes(term) ||
+        customer.includes(term) ||
+        creator.includes(term)
+      );
     });
   }, [contracts, searchTerm]);
 
   const summary = useMemo(() => {
-    const totalAmount = contracts.reduce((acc, item) => acc + Number(item.amount || 0), 0);
-    const activeCount = contracts.filter((item) => item.status === "active").length;
+    const totalAmount = contracts.reduce(
+      (acc, item) => acc + Number(item.amount || 0),
+      0,
+    );
+    const activeCount = contracts.filter(
+      (item) => item.status === "active",
+    ).length;
     const expiringSoon = contracts.filter(
-      (item) => typeof item.daysRemaining === "number" && item.daysRemaining >= 0 && item.daysRemaining <= 30,
+      (item) =>
+        typeof item.daysRemaining === "number" &&
+        item.daysRemaining >= 0 &&
+        item.daysRemaining <= 30,
     ).length;
     return { totalAmount, activeCount, expiringSoon };
   }, [contracts]);
@@ -195,7 +225,9 @@ export default function Contracts() {
     () =>
       customers.map((item) => ({
         value: String(item.id),
-        label: item.fullName ? `${item.fullName}${item.company ? ` - ${item.company}` : ""}` : `#${item.id}`,
+        label: item.fullName
+          ? `${item.fullName}${item.company ? ` - ${item.company}` : ""}`
+          : `#${item.id}`,
       })),
     [customers],
   );
@@ -207,21 +239,29 @@ export default function Contracts() {
           <FileText className="text-teal-700" size={30} />
           مدیریت قراردادها
         </h1>
-        <p className="panel-subtitle">ثبت قرارداد جدید، مشاهده سوابق و مدیریت انقضا</p>
+        <p className="panel-subtitle">
+          ثبت قرارداد جدید، مشاهده سوابق و مدیریت انقضا
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="panel-card p-4">
           <p className="text-xs text-slate-500">کل مبلغ قراردادها</p>
-          <p className="text-xl font-extrabold text-slate-900 mt-2">{formatAmount(summary.totalAmount)}</p>
+          <p className="text-xl font-extrabold text-slate-900 mt-2">
+            {formatAmount(summary.totalAmount)}
+          </p>
         </div>
         <div className="panel-card p-4">
           <p className="text-xs text-slate-500">قراردادهای فعال</p>
-          <p className="text-xl font-extrabold text-emerald-700 mt-2">{summary.activeCount}</p>
+          <p className="text-xl font-extrabold text-emerald-700 mt-2">
+            {summary.activeCount}
+          </p>
         </div>
         <div className="panel-card p-4">
           <p className="text-xs text-slate-500">در آستانه پایان (30 روز)</p>
-          <p className="text-xl font-extrabold text-amber-700 mt-2">{summary.expiringSoon}</p>
+          <p className="text-xl font-extrabold text-amber-700 mt-2">
+            {summary.expiringSoon}
+          </p>
         </div>
       </div>
 
@@ -238,12 +278,18 @@ export default function Contracts() {
         </div>
       )}
 
-      <div className={`grid grid-cols-1 ${canCreateContract ? "xl:grid-cols-3" : ""} gap-5`}>
+      <div
+        className={`grid grid-cols-1 ${canCreateContract ? "xl:grid-cols-3" : ""} gap-5`}
+      >
         {canCreateContract && (
           <div className="xl:col-span-1">
             <div className="panel-card p-5 xl:sticky xl:top-24">
               <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-                {editingId ? <Edit2 size={18} className="text-amber-600" /> : <Plus size={18} className="text-teal-700" />}
+                {editingId ? (
+                  <Edit2 size={18} className="text-amber-600" />
+                ) : (
+                  <Plus size={18} className="text-teal-700" />
+                )}
                 {editingId ? "ویرایش قرارداد" : "ثبت قرارداد جدید"}
               </h2>
 
@@ -259,7 +305,9 @@ export default function Contracts() {
                 {!isCustomer && (
                   <SearchableSelect
                     value={form.customerId}
-                    onChange={(value) => setForm({ ...form, customerId: value })}
+                    onChange={(value) =>
+                      setForm({ ...form, customerId: value })
+                    }
                     options={customerOptions}
                     placeholder="انتخاب مشتری"
                   />
@@ -289,7 +337,11 @@ export default function Contracts() {
                   className="w-full"
                 />
 
-                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="panel-select">
+                <select
+                  value={form.status}
+                  onChange={(e) => setForm({ ...form, status: e.target.value })}
+                  className="panel-select"
+                >
                   <option value="active">فعال</option>
                   <option value="expired">منقضی</option>
                   <option value="cancelled">لغو شده</option>
@@ -298,18 +350,32 @@ export default function Contracts() {
                 <textarea
                   rows={3}
                   value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, description: e.target.value })
+                  }
                   placeholder="توضیحات قرارداد"
                   className="panel-textarea"
                 />
 
-                <button type="submit" disabled={saving} className="panel-btn-primary w-full">
-                  {saving ? <Loader2 className="animate-spin" size={16} /> : <CalendarDays size={16} />}
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="panel-btn-primary w-full"
+                >
+                  {saving ? (
+                    <Loader2 className="animate-spin" size={16} />
+                  ) : (
+                    <CalendarDays size={16} />
+                  )}
                   {editingId ? "ذخیره تغییرات" : "ثبت قرارداد"}
                 </button>
 
                 {editingId && (
-                  <button type="button" onClick={resetForm} className="panel-btn-secondary w-full">
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    className="panel-btn-secondary w-full"
+                  >
                     انصراف از ویرایش
                   </button>
                 )}
@@ -333,7 +399,10 @@ export default function Contracts() {
               )}
 
               <div className="relative w-full md:w-72">
-                <Search className="absolute right-3 top-3 text-slate-400" size={16} />
+                <Search
+                  className="absolute right-3 top-3 text-slate-400"
+                  size={16}
+                />
                 <input
                   type="text"
                   value={searchTerm}
@@ -359,7 +428,10 @@ export default function Contracts() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={canCreateContract ? "6" : "5"} className="py-10 text-center text-slate-500">
+                      <td
+                        colSpan={canCreateContract ? "6" : "5"}
+                        className="py-10 text-center text-slate-500"
+                      >
                         <span className="inline-flex items-center gap-2">
                           <Loader2 className="animate-spin" size={16} />
                           در حال بارگذاری...
@@ -368,7 +440,10 @@ export default function Contracts() {
                     </tr>
                   ) : filteredContracts.length === 0 ? (
                     <tr>
-                      <td colSpan={canCreateContract ? "6" : "5"} className="py-10 text-center text-slate-500">
+                      <td
+                        colSpan={canCreateContract ? "6" : "5"}
+                        className="py-10 text-center text-slate-500"
+                      >
                         قراردادی یافت نشد.
                       </td>
                     </tr>
@@ -377,16 +452,34 @@ export default function Contracts() {
                       <tr key={item.id}>
                         <td className="min-w-[190px]">
                           <p className="font-semibold text-slate-900">
-                            <OverflowTooltip text={item.title} className="max-w-[180px]" />
+                            <OverflowTooltip
+                              text={item.title}
+                              className="max-w-[180px]"
+                            />
                           </p>
                           <p className="text-xs text-slate-500 mt-1">
-                            {toJalaliDate(item.startDate)} تا {toJalaliDate(item.endDate)}
+                            {item.startDate
+                              ? new Date(item.startDate).toLocaleDateString(
+                                  "fa-IR",
+                                )
+                              : ""}
+                            {item.endDate
+                              ? " تا " +
+                                new Date(item.endDate).toLocaleDateString(
+                                  "fa-IR",
+                                )
+                              : ""}
                           </p>
                         </td>
                         <td className="min-w-[170px]">
-                          <OverflowTooltip text={item.customer?.fullName || "-"} className="max-w-[160px]" />
+                          <OverflowTooltip
+                            text={item.customer?.fullName || "-"}
+                            className="max-w-[160px]"
+                          />
                         </td>
-                        <td className="whitespace-nowrap">{formatAmount(item.amount)}</td>
+                        <td className="whitespace-nowrap">
+                          {formatAmount(item.amount)}
+                        </td>
                         <td className="whitespace-nowrap">
                           <span
                             className={`inline-flex whitespace-nowrap px-2 py-1 rounded-full text-xs font-medium ${
@@ -397,19 +490,36 @@ export default function Contracts() {
                                   : "bg-emerald-100 text-emerald-700"
                             }`}
                           >
-                            {item.daysRemaining < 0 ? "منقضی" : `${item.daysRemaining} روز`}
+                            {item.daysRemaining < 0
+                              ? "منقضی"
+                              : `${item.daysRemaining} روز`}
                           </span>
                         </td>
                         <td className="min-w-[150px]">
-                          <OverflowTooltip text={item.creator?.fullName || item.creator?.username || "-"} className="max-w-[140px]" />
+                          <OverflowTooltip
+                            text={
+                              item.creator?.fullName ||
+                              item.creator?.username ||
+                              "-"
+                            }
+                            className="max-w-[140px]"
+                          />
                         </td>
                         {canCreateContract && (
                           <td>
                             <div className="flex items-center gap-2">
-                              <button type="button" onClick={() => editContract(item)} className="panel-btn-secondary py-1.5 px-3">
+                              <button
+                                type="button"
+                                onClick={() => editContract(item)}
+                                className="panel-btn-secondary py-1.5 px-3"
+                              >
                                 <Edit2 size={14} />
                               </button>
-                              <button type="button" onClick={() => deleteContract(item.id)} className="panel-btn-danger py-1.5 px-3">
+                              <button
+                                type="button"
+                                onClick={() => deleteContract(item.id)}
+                                className="panel-btn-danger py-1.5 px-3"
+                              >
                                 <Trash2 size={14} />
                               </button>
                             </div>

@@ -32,6 +32,8 @@ const customerMenuItems = [
 
 const agentMenuItems = [
   { path: "/dashboard", label: "داشبورد", icon: LayoutDashboard },
+  { path: "/customers", label: "مشتریان", icon: Users },
+
   { path: "/contracts", label: "قراردادهای من", icon: FileText },
   { path: "/messages", label: "پیام ها", icon: MessageSquare },
 ];

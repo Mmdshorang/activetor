@@ -5,7 +5,7 @@ const { auth, allowRoles } = require("../middleware/authorize");
 const { parseApiError } = require("../utils/apiError");
 
 router.use(auth);
-router.use(allowRoles("admin", "user"));
+router.use(allowRoles("admin", "user", "agent"));
 
 const sanitizeCustomer = (customer) => {
   const json = customer.toJSON ? customer.toJSON() : customer;
@@ -20,13 +20,6 @@ const parseDateOrNull = (value) => {
   return parsed;
 };
 
-const resolveOwnerUserId = async (providedUserId) => {
-  if (providedUserId) {
-    return providedUserId;
-  }
-  const fallbackUser = await db.User.findOne({ order: [["id", "ASC"]] });
-  return fallbackUser ? fallbackUser.id : null;
-};
 
 const calcDaysRemaining = (endDate) => {
   if (!endDate) return null;
@@ -46,7 +39,7 @@ router.post("/upload-customers", async (req, res) => {
         message: "ورودی باید یک آرایه از مشتریان باشد.",
       });
     }
-
+    const currentUserId = req.user.id;
     const createdCustomers = [];
     const errors = [];
 
@@ -85,19 +78,6 @@ router.post("/upload-customers", async (req, res) => {
           continue;
         }
 
-        // فرض می‌کنیم userId برای همه مشتریان در آرایه یکسان است یا باید از هر کدام جداگانه خوانده شود.
-        // در این مثال، از userId اولین مشتری یا مقدار پیش‌فرض استفاده می‌کنیم.
-        // اگر userId برای هر مشتری متفاوت است، باید آن را از customerData بخوانید.
-        const currentUserId = customerData.userId || userId; // یا از customerData.userId استفاده کنید اگر برای هر مشتری متفاوت است
-        const ownerUserId = await resolveOwnerUserId(currentUserId);
-        if (!ownerUserId) {
-          errors.push({
-            customer: customerData,
-            message: "ابتدا یک کاربر ادمین ثبت کنید",
-          });
-          continue;
-        }
-
         const existingPhone = await db.Customer.findOne({ where: { phone } });
         if (existingPhone) {
           errors.push({
@@ -121,7 +101,7 @@ router.post("/upload-customers", async (req, res) => {
           licenseLimit: normalizedLimit,
           contractStartDate: parseDateOrNull(contractStartDate),
           contractEndDate: parseDateOrNull(contractEndDate || expireDate),
-          userId: ownerUserId,
+          userId: currentUserId,
           isActive: isActive !== undefined ? Boolean(isActive) : true,
         });
 
@@ -153,7 +133,6 @@ router.post("/upload-customers", async (req, res) => {
       });
     }
   } catch (err) {
-    // خطای کلی که ممکن است خارج از حلقه رخ دهد (مثلاً در resolveOwnerUserId اگر برای همه مشتریان یکسان باشد و مشکل داشته باشد)
     res
       .status(500)
       .json({ message: parseApiError(err, "خطای کلی در پردازش درخواست") });
@@ -162,13 +141,44 @@ router.post("/upload-customers", async (req, res) => {
 // دریافت لیست مشتریان
 router.get("/", async (req, res) => {
   try {
+    // 1. بررسی هویت کاربر (اگر از middleware استفاده نمی‌کنید، این بخش اجباری است)
+    if (!req.user) {
+      return res.status(401).json({ message: "کاربر احراز هویت نشده است" });
+    }
+
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // 2. تعریف شرط where بر اساس رول
+    let whereCondition = {};
+
+    if (userRole === "agent") {
+      // اگر کاربر ادمین نبود (یا دقیقاً ادمین نبود)، فقط مشتری‌های خودش را ببیند
+      // نکته: اگر می‌خواهید ادمین‌ها همه را ببینند و فقط ادمین‌ها استثنا باشند، این شرط کافی است.
+      // اگر می‌خواهید دقیقاً 'agent' باشد و 'admin' یا 'super-admin' دیگر باشند:
+      whereCondition = {
+        userId: userId,
+      };
+    } else {
+      // برای ادمین‌ها (admin, super-admin و...) همه مشتریان نمایش داده می‌شود
+      // شرط where خالی می‌ماند تا همه را برگرداند
+      whereCondition = {};
+    }
+
+    // 3. دریافت لیست مشتریان با شرط تعیین شده
     const customers = await db.Customer.findAll({
+      where: whereCondition, // اعمال شرط فیلتر
       order: [["createdAt", "DESC"]],
     });
 
+    // 4. غنی‌سازی داده‌ها (همان منطق قبلی شما)
     const enrichedCustomers = await Promise.all(
       customers.map(async (customer) => {
         const safeCustomer = sanitizeCustomer(customer);
+
+        // اگر برای ایجنت‌ها نمی‌خواهید داده‌های حساس ادمین را لود کنید، می‌توانید اینجا هم شرط بگذارید
+        // اما معمولاً داده‌های مشتری (مثل قراردادها) برای ایجنت هم لازم است.
+
         const [latestContract, contractsCount] = await Promise.all([
           db.Contract.findOne({
             where: { customerId: customer.id },
@@ -241,12 +251,6 @@ router.post("/", async (req, res) => {
       });
     }
 
-    const ownerUserId = await resolveOwnerUserId(userId);
-    if (!ownerUserId) {
-      return res.status(400).json({
-        message: "ابتدا یک کاربر ادمین ثبت کنید",
-      });
-    }
 
     const existingUsername = await db.Customer.findOne({ where: { username } });
     if (existingUsername) {
@@ -256,7 +260,7 @@ router.post("/", async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(String(password), 10);
-
+    const currentUserId = req.user.id;
     const newCustomer = await db.Customer.create({
       fullName,
       phone,
@@ -269,7 +273,7 @@ router.post("/", async (req, res) => {
       licenseLimit: normalizedLimit,
       contractStartDate: parseDateOrNull(contractStartDate),
       contractEndDate: parseDateOrNull(contractEndDate || expireDate),
-      userId: ownerUserId,
+      userId: currentUserId,
       isActive: isActive !== undefined ? Boolean(isActive) : true,
     });
 
@@ -282,6 +286,11 @@ router.post("/", async (req, res) => {
 // ویرایش مشتری (برای تغییر وضعیت یا اطلاعات)
 router.put("/:id", async (req, res) => {
   try {
+    if (req.user.role === "agent" && customer.userId !== req.user.id) {
+      return res
+        .status(403)
+        .json({ message: "شما اجازه ویرایش این مشتری را ندارید" });
+    }
     const customer = await db.Customer.findByPk(req.params.id);
     if (!customer) {
       return res.status(404).json({ message: "مشتری یافت نشد" });
@@ -383,9 +392,14 @@ router.get("/:id/license-info", async (req, res) => {
 // حذف مشتری
 router.delete("/:id", async (req, res) => {
   try {
-    const customer = await db.Customer.findByPk(req.params.id);
+    const customer = await db.Customer.findByPk(req.params.id, {
+      paranoid: false, // برای اینکه اگر قبلاً soft delete شده باشد، پیدا شود
+    });
+    const role = req.user.role;
     if (!customer) {
       return res.status(404).json({ message: "مشتری یافت نشد" });
+    } else if (role !== "admin") {
+      return res.status(403).json({ message: "شما اجاره این کار رو ندارید" });
     }
 
     await customer.destroy();
