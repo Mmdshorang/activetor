@@ -143,18 +143,16 @@ router.post("/", async (req, res) => {
 
 router.put("/:id", async (req, res) => {
   try {
+    if (!canManageAll(req)) {
+      return res.status(403).json({ message: "فقط ادمین یا کاربر مجاز به ویرایش لایسنس است" });
+    }
+
     const license = await db.License.findByPk(req.params.id);
     if (!license) {
       return res.status(404).json({ message: "لایسنس یافت نشد" });
     }
-    if (isCustomer(req) && license.customerId !== req.user.id) {
-      return res.status(403).json({ message: "دسترسی غیرمجاز" });
-    }
-    if (!isCustomer(req) && !canManageAll(req)) {
-      return res.status(403).json({ message: "دسترسی غیرمجاز" });
-    }
 
-    const customerId = isCustomer(req) ? req.user.id : (resolveCustomerId(req.body) || license.customerId);
+    const customerId = resolveCustomerId(req.body) || license.customerId;
     if (!customerId) {
       return res.status(400).json({ message: "شناسه مشتری الزامی است" });
     }
@@ -178,13 +176,6 @@ router.put("/:id", async (req, res) => {
       customerId,
     };
 
-    if (isCustomer(req)) {
-      delete updatePayload.customerId;
-      delete updatePayload.userId;
-      delete updatePayload.isActive;
-      updatePayload.customerId = req.user.id;
-    }
-
     if (Object.prototype.hasOwnProperty.call(updatePayload, "userId")) {
       delete updatePayload.userId;
     }
@@ -203,15 +194,13 @@ router.put("/:id", async (req, res) => {
 // حذف لایسنس
 router.delete("/:id", async (req, res) => {
   try {
+    if (!canManageAll(req)) {
+      return res.status(403).json({ message: "فقط ادمین یا کاربر مجاز به حذف لایسنس است" });
+    }
+
     const license = await db.License.findByPk(req.params.id);
     if (!license) {
       return res.status(404).json({ message: "لایسنس یافت نشد" });
-    }
-    if (isCustomer(req) && license.customerId !== req.user.id) {
-      return res.status(403).json({ message: "دسترسی غیرمجاز" });
-    }
-    if (!isCustomer(req) && !canManageAll(req)) {
-      return res.status(403).json({ message: "دسترسی غیرمجاز" });
     }
     await license.destroy();
     res.json({ message: "لایسنس با موفقیت حذف شد" });
@@ -221,5 +210,3 @@ router.delete("/:id", async (req, res) => {
 });
 
 module.exports = router;
-
-

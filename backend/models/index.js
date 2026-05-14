@@ -14,6 +14,10 @@ db.Message = require("./message")(sequelize, Sequelize);
 db.License = require("./License")(sequelize, Sequelize);
 db.Contract = require("./contract")(sequelize, Sequelize);
 db.RenewalRequest = require("./renewalRequest")(sequelize, Sequelize);
+db.OtpCode = require("./otpCode")(sequelize, Sequelize);
+db.AppSetting = require("./appSetting")(sequelize, Sequelize);
+db.SmsLog = require("./smsLog")(sequelize, Sequelize);
+db.CustomerRequest = require("./customerRequest")(sequelize, Sequelize);
 
 Object.keys(db).forEach((modelName) => {
   if (db[modelName] && typeof db[modelName].associate === "function") {

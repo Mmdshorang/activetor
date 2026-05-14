@@ -1,8 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Users, UserPlus, Edit2, Save, X, Loader2, AlertCircle, Search, Phone, UserCircle2, Shield } from "lucide-react";
 import api from "../services/api";
+import { PAGE_DEFINITIONS, ROLE_DEFAULT_PAGE_PERMISSIONS } from "../constants/pagePermissions";
+import { getAuthUser } from "../utils/auth";
 
 export default function UsersM() {
+  const authUser = getAuthUser();
+  const isAdmin = authUser?.role === "admin";
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState({
     fullName: "",
@@ -10,6 +14,7 @@ export default function UsersM() {
     password: "",
     phone: "",
     role: "user",
+    pagePermissions: [...ROLE_DEFAULT_PAGE_PERMISSIONS.user],
   });
   const [editId, setEditId] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -34,8 +39,24 @@ export default function UsersM() {
   }, []);
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    if (name === "role") {
+      const defaults = ROLE_DEFAULT_PAGE_PERMISSIONS[value] || ROLE_DEFAULT_PAGE_PERMISSIONS.user;
+      setForm({ ...form, role: value, pagePermissions: [...defaults] });
+    } else {
+      setForm({ ...form, [name]: value });
+    }
     if (success) setSuccess("");
+  };
+
+  const togglePermission = (pageKey) => {
+    setForm((prev) => {
+      const current = Array.isArray(prev.pagePermissions) ? prev.pagePermissions : [];
+      if (current.includes(pageKey)) {
+        return { ...prev, pagePermissions: current.filter((item) => item !== pageKey) };
+      }
+      return { ...prev, pagePermissions: [...current, pageKey] };
+    });
   };
 
   const saveUser = async (e) => {
@@ -52,14 +73,24 @@ export default function UsersM() {
       if (editId) {
         const payload = { ...form };
         if (!payload.password) delete payload.password;
+        if (!isAdmin) delete payload.pagePermissions;
         await api.put(`/users/${editId}`, payload);
         setSuccess("کاربر با موفقیت ویرایش شد.");
       } else {
-        await api.post("/users", form);
+        const payload = { ...form };
+        if (!isAdmin) delete payload.pagePermissions;
+        await api.post("/users", payload);
         setSuccess("کاربر جدید با موفقیت اضافه شد.");
       }
 
-      setForm({ fullName: "", username: "", password: "", phone: "", role: "user" });
+      setForm({
+        fullName: "",
+        username: "",
+        password: "",
+        phone: "",
+        role: "user",
+        pagePermissions: [...ROLE_DEFAULT_PAGE_PERMISSIONS.user],
+      });
       setEditId(null);
       loadUsers();
     } catch (err) {
@@ -76,6 +107,9 @@ export default function UsersM() {
       password: "",
       phone: user.phone || "",
       role: user.role || "user",
+      pagePermissions: Array.isArray(user.pagePermissions)
+        ? user.pagePermissions
+        : [...(ROLE_DEFAULT_PAGE_PERMISSIONS[user.role] || ROLE_DEFAULT_PAGE_PERMISSIONS.user)],
     });
     setEditId(user.id);
     setError("");
@@ -84,7 +118,14 @@ export default function UsersM() {
   };
 
   const cancelEdit = () => {
-    setForm({ fullName: "", username: "", password: "", phone: "", role: "user" });
+    setForm({
+      fullName: "",
+      username: "",
+      password: "",
+      phone: "",
+      role: "user",
+      pagePermissions: [...ROLE_DEFAULT_PAGE_PERMISSIONS.user],
+    });
     setEditId(null);
     setError("");
   };
@@ -189,6 +230,25 @@ export default function UsersM() {
                   </select>
                 </div>
               </div>
+
+              {isAdmin && form.role !== "admin" && (
+                <div>
+                  <label className="panel-label">دسترسی صفحات</label>
+                  <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto border border-slate-200 rounded-xl p-3">
+                    {PAGE_DEFINITIONS.map((page) => (
+                      <label key={page.key} className="flex items-center justify-between text-sm text-slate-700">
+                        <span>{page.label}</span>
+                        <input
+                          type="checkbox"
+                          checked={form.pagePermissions.includes(page.key)}
+                          onChange={() => togglePermission(page.key)}
+                          className="h-4 w-4 accent-teal-600"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="pt-2 flex gap-2">
                 <button type="submit" disabled={loading} className="panel-btn-primary flex-1">

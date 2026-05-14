@@ -19,8 +19,11 @@ import SearchableSelect from "../components/SearchableSelect";
 import OverflowTooltip from "../components/OverflowTooltip";
 import axios from "axios";
 import qs from "qs";
+import { getAuthUser } from "../utils/auth";
 
 export default function Licenses() {
+  const authUser = getAuthUser();
+  const canManageAll = authUser?.role === "admin" || authUser?.role === "user";
   const toGregorianDate = (jalaliOrDate) => {
     if (!jalaliOrDate) return null;
     const jalaliParsed = moment(jalaliOrDate, "jYYYY/jMM/jDD", true);
@@ -231,6 +234,10 @@ export default function Licenses() {
     }
   };
   const editLicense = (license) => {
+    if (!canManageAll) {
+      setError("فقط ادمین یا کاربر می‌تواند لایسنس را ویرایش کند");
+      return;
+    }
     setEditingId(license.id);
     setForm({
       systemName: license.systemName,
@@ -244,6 +251,10 @@ export default function Licenses() {
   };
 
   const deleteLicense = async (id) => {
+    if (!canManageAll) {
+      setError("فقط ادمین یا کاربر می‌تواند لایسنس را حذف کند");
+      return;
+    }
     if (!window.confirm("آیا این لایسنس حذف شود؟")) return;
 
     try {
@@ -494,8 +505,8 @@ export default function Licenses() {
                   <th>نسخه</th>
                   <th>مشتری</th>
                   <th>کد اصلی</th>
-                  <th>انقضا</th>
-                  <th>عملیات</th>
+                      <th>انقضا</th>
+                      <th>عملیات</th>
                   <th>شناسه لایسنس</th>
                 </tr>
               </thead>
@@ -551,22 +562,26 @@ export default function Licenses() {
                           : "-"}
                       </td>
                       <td className="whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => editLicense(license)}
-                            className="panel-btn-secondary py-1.5 px-3"
-                          >
-                            <Edit2 size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => deleteLicense(license.id)}
-                            className="panel-btn-danger py-1.5 px-3"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
+                        {canManageAll ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => editLicense(license)}
+                              className="panel-btn-secondary py-1.5 px-3"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => deleteLicense(license.id)}
+                              className="panel-btn-danger py-1.5 px-3"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-400">فقط ادمین/کاربر</span>
+                        )}
                       </td>
                       <td className="font-mono whitespace-nowrap" dir="ltr">
                         <OverflowTooltip

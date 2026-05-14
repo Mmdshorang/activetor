@@ -30,10 +30,42 @@ const StatCard = ({ title, value, icon: Icon, color }) => (
   </div>
 );
 
+const ClickableStatCard = ({ onClick, ...props }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="text-right w-full panel-card p-5 hover:shadow-lg hover:-translate-y-0.5 transition"
+  >
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <p className="text-sm text-slate-500">{props.title}</p>
+        <p className="text-2xl font-extrabold text-slate-900 mt-1">{props.value}</p>
+        <p className="text-xs text-slate-400 mt-2">برای مشاهده لیست کلیک کنید</p>
+      </div>
+      <div className={`w-11 h-11 rounded-xl text-white flex items-center justify-center ${props.color}`}>
+        <props.icon size={20} />
+      </div>
+    </div>
+  </button>
+);
+
 const formatContractRemaining = (days) => {
   if (typeof days !== "number") return "نامشخص";
   if (days < 0) return "منقضی شده";
   return `${days} روز`;
+};
+
+const formatDateFa = (value) => {
+  if (!value) return "نامشخص";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "نامشخص";
+  return date.toLocaleDateString("fa-IR");
+};
+
+const formatMoney = (value) => {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "نامشخص";
+  return num.toLocaleString("fa-IR");
 };
 
 export default function Dashboard() {
@@ -48,6 +80,17 @@ export default function Dashboard() {
   const [authUser, setAuthUser] = useState(null);
   const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [listsLoading, setListsLoading] = useState(false);
+  const [dashboardLists, setDashboardLists] = useState({
+    activeSystems: [],
+    activeContracts: [],
+    expiringSoonContracts: [],
+    soonDays: 30,
+  });
+  const [listModal, setListModal] = useState({ open: false, type: null });
+  const [smsSettingsLoading, setSmsSettingsLoading] = useState(false);
+  const [smsSettingsSaving, setSmsSettingsSaving] = useState(false);
+  const [smsSettings, setSmsSettings] = useState(null);
 
   useEffect(() => {
     const user = getAuthUser();
@@ -70,6 +113,69 @@ export default function Dashboard() {
 
     fetchData();
   }, []);
+
+  const loadSmsSettings = async () => {
+    if (smsSettingsLoading) return;
+    try {
+      setSmsSettingsLoading(true);
+      const res = await api.get("/settings/sms-contract-expiry");
+      setSmsSettings(res.data);
+    } catch (error) {
+      console.error("Error fetching sms settings:", error);
+    } finally {
+      setSmsSettingsLoading(false);
+    }
+  };
+
+  const saveSmsSettings = async (patch) => {
+    if (!smsSettings) return;
+    try {
+      setSmsSettingsSaving(true);
+      const res = await api.put("/settings/sms-contract-expiry", {
+        enabled: smsSettings.enabled,
+        daysBeforeEnd: smsSettings.daysBeforeEnd,
+        template: smsSettings.template,
+        ...patch,
+      });
+      setSmsSettings((prev) => ({ ...(prev || {}), ...res.data }));
+    } catch (error) {
+      console.error("Error saving sms settings:", error);
+    } finally {
+      setSmsSettingsSaving(false);
+    }
+  };
+
+  const runSmsNow = async () => {
+    try {
+      setSmsSettingsSaving(true);
+      const res = await api.post("/settings/sms-contract-expiry/run");
+      // just keep lastRunAt (job updates setting too), show logs in console for now
+      console.log("SMS job run result:", res.data);
+      await loadSmsSettings();
+    } catch (error) {
+      console.error("Error running sms job:", error);
+    } finally {
+      setSmsSettingsSaving(false);
+    }
+  };
+
+  const openList = async (type) => {
+    setListModal({ open: true, type });
+    if (dashboardLists.activeSystems.length > 0 || dashboardLists.activeContracts.length > 0 || dashboardLists.expiringSoonContracts.length > 0) {
+      return;
+    }
+    try {
+      setListsLoading(true);
+      const res = await api.get("/stats/dashboard-lists?days=30");
+      setDashboardLists(res.data);
+    } catch (error) {
+      console.error("Error fetching dashboard lists:", error);
+    } finally {
+      setListsLoading(false);
+    }
+  };
+
+  const closeList = () => setListModal({ open: false, type: null });
 
   const summary = useMemo(
     () => {
@@ -119,6 +225,9 @@ export default function Dashboard() {
     [stats, authUser?.role],
   );
 
+  const showListsSection = authUser?.role !== "customer";
+  const showAdminSmsSettings = authUser?.role === "admin";
+
   if (loading) {
     return (
       <div className="panel-card h-56 flex items-center justify-center">
@@ -154,6 +263,222 @@ export default function Dashboard() {
           <StatCard key={item.title} {...item} />
         ))}
       </div>
+
+      {showAdminSmsSettings && (
+        <div className="panel-card-soft p-5 md:p-6 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="font-extrabold text-slate-900">پیامک یادآوری پایان قرارداد</h3>
+              <p className="text-sm text-slate-500">ارسال خودکار پیامک برای قراردادهایی که نزدیک پایان هستند</p>
+            </div>
+            <button
+              type="button"
+              className="panel-btn"
+              onClick={loadSmsSettings}
+              disabled={smsSettingsLoading}
+            >
+              {smsSettingsLoading ? "در حال دریافت..." : "بارگذاری تنظیمات"}
+            </button>
+          </div>
+
+          {!smsSettings ? (
+            <p className="text-sm text-slate-500">برای مشاهده و تغییر تنظیمات، روی "بارگذاری تنظیمات" کلیک کنید.</p>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="panel-card p-4">
+                <p className="text-sm text-slate-500 mb-2">وضعیت</p>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-slate-900">{smsSettings.enabled ? "فعال" : "غیرفعال"}</span>
+                  <button
+                    type="button"
+                    className="panel-btn-primary"
+                    onClick={() => saveSmsSettings({ enabled: !smsSettings.enabled })}
+                    disabled={smsSettingsSaving}
+                  >
+                    {smsSettings.enabled ? "غیرفعال کن" : "فعال کن"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="panel-card p-4">
+                <p className="text-sm text-slate-500 mb-2">چند روز مانده</p>
+                <div className="flex items-center gap-2">
+                  <input
+                    className="panel-input w-24"
+                    type="number"
+                    min="1"
+                    max="60"
+                    value={smsSettings.daysBeforeEnd ?? 5}
+                    onChange={(e) => setSmsSettings((prev) => ({ ...prev, daysBeforeEnd: Number(e.target.value) }))}
+                  />
+                  <button
+                    type="button"
+                    className="panel-btn"
+                    onClick={() => saveSmsSettings({ daysBeforeEnd: smsSettings.daysBeforeEnd })}
+                    disabled={smsSettingsSaving}
+                  >
+                    ذخیره
+                  </button>
+                </div>
+                <p className="text-xs text-slate-400 mt-2">پیشنهاد: 5 روز</p>
+              </div>
+
+              <div className="panel-card p-4">
+                <p className="text-sm text-slate-500 mb-2">نام Template کاوه‌نگار</p>
+                <div className="flex items-center gap-2">
+                  <input
+                    className="panel-input flex-1"
+                    type="text"
+                    value={smsSettings.template || ""}
+                    onChange={(e) => setSmsSettings((prev) => ({ ...prev, template: e.target.value }))}
+                    placeholder="مثال: contract_expire"
+                  />
+                  <button
+                    type="button"
+                    className="panel-btn"
+                    onClick={() => saveSmsSettings({ template: smsSettings.template })}
+                    disabled={smsSettingsSaving}
+                  >
+                    ذخیره
+                  </button>
+                </div>
+                <p className="text-xs text-slate-400 mt-2">آخرین اجرا: {smsSettings.lastRunAt ? formatDateFa(smsSettings.lastRunAt) : "—"}</p>
+              </div>
+
+              <div className="lg:col-span-3 flex items-center justify-between gap-3">
+                <p className="text-sm text-slate-500">
+                  کرون: <span className="font-mono">{smsSettings.cron}</span> ، تایم‌زون: <span className="font-mono">{smsSettings.timezone}</span>
+                </p>
+                <button
+                  type="button"
+                  className="panel-btn"
+                  onClick={runSmsNow}
+                  disabled={smsSettingsSaving}
+                >
+                  اجرای دستی (تست)
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {showListsSection && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <ClickableStatCard
+            title="سیستم های فعال"
+            value={(dashboardLists.activeSystems?.length || 0) || "—"}
+            icon={KeyRound}
+            color="bg-sky-700"
+            onClick={() => openList("systems")}
+          />
+          <ClickableStatCard
+            title="قراردادهای فعال"
+            value={(dashboardLists.activeContracts?.length || 0) || "—"}
+            icon={FileText}
+            color="bg-emerald-600"
+            onClick={() => openList("activeContracts")}
+          />
+          <ClickableStatCard
+            title="قراردادهای نزدیک پایان"
+            value={(dashboardLists.expiringSoonContracts?.length || 0) || "—"}
+            icon={Clock3}
+            color="bg-amber-600"
+            onClick={() => openList("expiringSoon")}
+          />
+        </div>
+      )}
+
+      {listModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-3">
+          <button type="button" className="absolute inset-0 bg-slate-900/50" onClick={closeList} aria-label="بستن" />
+          <div className="relative w-full max-w-5xl panel-card overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 font-bold text-slate-800">
+                <Clock3 size={18} className="text-teal-700" />
+                {listModal.type === "systems" && "سیستم های فعال"}
+                {listModal.type === "activeContracts" && "قراردادهای فعال"}
+                {listModal.type === "expiringSoon" && `قراردادهای نزدیک پایان (تا ${dashboardLists.soonDays} روز)`}
+              </div>
+              <button type="button" className="panel-btn" onClick={closeList}>بستن</button>
+            </div>
+
+            <div className="p-4 md:p-5 max-h-[70vh] overflow-y-auto">
+              {listsLoading ? (
+                <div className="h-40 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-full border-4 border-slate-200 border-t-teal-600 animate-spin" />
+                </div>
+              ) : (
+                <>
+                  {listModal.type === "systems" && (
+                    <div className="panel-table-wrap">
+                      <table className="panel-table">
+                        <thead>
+                          <tr>
+                            <th>سیستم</th>
+                            <th>لایسنس فعال</th>
+                            <th>تعداد مشتری</th>
+                            <th>آخرین انقضا</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dashboardLists.activeSystems?.length ? (
+                            dashboardLists.activeSystems.map((row) => (
+                              <tr key={row.systemName}>
+                                <td className="font-medium text-slate-900">{row.systemName}</td>
+                                <td className="text-slate-600">{row.activeLicenses}</td>
+                                <td className="text-slate-600">{row.customersCount}</td>
+                                <td className="text-slate-500">{formatDateFa(row.latestExpireDate)}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan="4" className="text-center py-8 text-slate-500">موردی یافت نشد.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {(listModal.type === "activeContracts" || listModal.type === "expiringSoon") && (
+                    <div className="panel-table-wrap">
+                      <table className="panel-table">
+                        <thead>
+                          <tr>
+                            <th>عنوان</th>
+                            <th>مشتری</th>
+                            <th>مبلغ</th>
+                            <th>پایان</th>
+                            <th>باقی مانده</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(listModal.type === "activeContracts" ? dashboardLists.activeContracts : dashboardLists.expiringSoonContracts)?.length ? (
+                            (listModal.type === "activeContracts" ? dashboardLists.activeContracts : dashboardLists.expiringSoonContracts).map((c) => (
+                              <tr key={c.id}>
+                                <td className="font-medium text-slate-900">{c.title}</td>
+                                <td className="text-slate-600">{c.customer?.fullName || c.customer?.username || "—"}</td>
+                                <td className="text-slate-600">{formatMoney(c.amount)}</td>
+                                <td className="text-slate-500">{formatDateFa(c.endDate)}</td>
+                                <td className="text-slate-600">{formatContractRemaining(c.daysRemaining)}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan="5" className="text-center py-8 text-slate-500">موردی یافت نشد.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {authUser?.role !== "customer" && (
         <div className="panel-card overflow-hidden">

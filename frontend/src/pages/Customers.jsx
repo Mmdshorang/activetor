@@ -48,7 +48,11 @@ export default function Customers() {
       : null;
   };
   const user = getAuthUser();
+  const isAdmin = user?.role === "admin";
+  const isAgent = user?.role === "agent";
+  const canApproveRequests = user?.role === "admin" || user?.role === "user";
   const [customers, setCustomers] = useState([]);
+  const [customerRequests, setCustomerRequests] = useState([]);
   const [searchTerm, setSearchTerm] = useState(""); // State برای جستجو
   const [editingCustomerId, setEditingCustomerId] = useState(null);
 
@@ -57,6 +61,8 @@ export default function Customers() {
     phone: "",
     company: "",
     address: "",
+    supportStatus: "",
+    note: "",
     username: "",
     password: "",
     licenseLimit: 1,
@@ -83,8 +89,19 @@ export default function Customers() {
     }
   };
 
+  const loadCustomerRequests = async () => {
+    if (!user) return;
+    try {
+      const res = await api.get("/customer-requests?status=pending");
+      setCustomerRequests(res.data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     loadCustomers();
+    loadCustomerRequests();
   }, []);
 
   // هندل کردن تغییرات فرم
@@ -109,6 +126,8 @@ export default function Customers() {
       phone: "",
       company: "",
       address: "",
+      supportStatus: "",
+      note: "",
       username: "",
       password: "",
       licenseLimit: 1,
@@ -124,6 +143,8 @@ export default function Customers() {
       phone: customer.phone || "",
       company: customer.company || "",
       address: customer.address || "",
+      supportStatus: customer.supportStatus || "",
+      note: "",
       username: customer.username || "",
       password: "",
       licenseLimit: customer.licenseLimit || 1,
@@ -139,21 +160,44 @@ export default function Customers() {
   // ذخیره/ویرایش مشتری
   const saveCustomer = async (e) => {
     e.preventDefault();
-    if (!form.fullName || !form.phone || !form.username) {
-      setError("نام، شماره موبایل و نام کاربری الزامی است.");
-      return;
-    }
-    if (!editingCustomerId && !form.password) {
-      setError("رمز عبور برای مشتری جدید الزامی است.");
-      return;
-    }
-    if (Number(form.licenseLimit) < 1) {
-      setError("سقف لایسنس باید حداقل ۱ باشد.");
-      return;
+    if (isAgent) {
+      if (!form.fullName || !form.phone) {
+        setError("نام و شماره موبایل الزامی است.");
+        return;
+      }
+    } else {
+      if (!form.fullName || !form.phone || !form.username) {
+        setError("نام، شماره موبایل و نام کاربری الزامی است.");
+        return;
+      }
+      if (!editingCustomerId && !form.password) {
+        setError("رمز عبور برای مشتری جدید الزامی است.");
+        return;
+      }
+      if (Number(form.licenseLimit) < 1) {
+        setError("سقف لایسنس باید حداقل ۱ باشد.");
+        return;
+      }
     }
 
     try {
       setLoading(true);
+
+      if (isAgent) {
+        const payload = {
+          fullName: form.fullName,
+          phone: form.phone,
+          company: form.company,
+          address: form.address,
+          note: form.note,
+        };
+        await api.post("/customer-requests", payload);
+        setSuccess("درخواست مشتری ثبت شد و منتظر تایید ادمین/کاربر است.");
+        resetForm();
+        loadCustomerRequests();
+        return;
+      }
+
       const payload = {
         ...form,
         licenseLimit: Number(form.licenseLimit),
@@ -161,10 +205,10 @@ export default function Customers() {
         contractEndDate: toGregorianDate(form.contractEndDate),
         expireDate: toGregorianDate(form.contractEndDate),
       };
+      delete payload.note;
 
-      if (!payload.password) {
-        delete payload.password;
-      }
+      if (!isAdmin) delete payload.supportStatus;
+      if (!payload.password) delete payload.password;
 
       if (editingCustomerId) {
         await api.put(`/customers/${editingCustomerId}`, payload);
@@ -184,6 +228,34 @@ export default function Customers() {
     }
   };
 
+  const approveRequest = async (requestId) => {
+    try {
+      setLoading(true);
+      setError("");
+      await api.put(`/customer-requests/${requestId}/approve`);
+      setSuccess("درخواست تایید شد و مشتری ساخته شد.");
+      await Promise.all([loadCustomers(), loadCustomerRequests()]);
+    } catch (err) {
+      setError(err?.response?.data?.message || "خطا در تایید درخواست.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const rejectRequest = async (requestId) => {
+    try {
+      setLoading(true);
+      setError("");
+      await api.put(`/customer-requests/${requestId}/reject`);
+      setSuccess("درخواست رد شد.");
+      await loadCustomerRequests();
+    } catch (err) {
+      setError(err?.response?.data?.message || "خطا در رد کردن درخواست.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const toggleStatus = async (customer) => {
     try {
       await api.put(`/customers/${customer.id}`, {
@@ -197,7 +269,7 @@ export default function Customers() {
   };
 
   const deleteCustomer = async (id) => {
-    if(user.role !="admin"){
+    if (!isAdmin) {
       setError("فقط ادمین می تونه کاربر رو حذف کنه");
       return;
     }
@@ -337,7 +409,7 @@ export default function Customers() {
         </div>
         <div className="App">
           <h1>بارگذاری اطلاعات مشتریان</h1>
-          {showModal && user.role =='admin' &&(
+          {showModal && isAdmin &&(
             <ExcelUploader
               dbFields={databaseFields}
               onDataUpload={handleDataToBackend}
@@ -352,6 +424,61 @@ export default function Customers() {
             </p>
           )}
         </div>
+
+        {canApproveRequests && customerRequests.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 mb-6">
+            <h2 className="text-xl font-bold text-gray-800 mb-4">
+              درخواست های در انتظار تایید
+            </h2>
+            <div className="panel-table-wrap max-h-[40vh]">
+              <table className="panel-table">
+                <thead>
+                  <tr>
+                    <th>نام</th>
+                    <th>موبایل</th>
+                    <th>شرکت</th>
+                    <th>آدرس</th>
+                    <th>ثبت کننده</th>
+                    <th>عملیات</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customerRequests.map((r) => (
+                    <tr key={r.id}>
+                      <td className="font-semibold text-slate-900">{r.fullName}</td>
+                      <td dir="ltr" className="font-mono">{r.phone}</td>
+                      <td>{r.company || "-"}</td>
+                      <td>
+                        <OverflowTooltip text={r.address || "-"} className="max-w-[180px]" />
+                      </td>
+                      <td>{r.requesterUser?.fullName || r.requesterUser?.username || "-"}</td>
+                      <td className="whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => approveRequest(r.id)}
+                            className="panel-btn-primary py-1.5 px-3"
+                            disabled={loading}
+                          >
+                            تایید
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => rejectRequest(r.id)}
+                            className="panel-btn-danger py-1.5 px-3"
+                            disabled={loading}
+                          >
+                            رد
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* فرم افزودن مشتری */}
           <div className="lg:col-span-1">
@@ -359,9 +486,9 @@ export default function Customers() {
               <div className="w-full flex items-center justify-center gap-2">
                 <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
                   <Plus className="text-teal-700" size={20} />
-                  افزودن مشتری جدید
+                  {isAgent ? "ثبت درخواست مشتری" : "افزودن مشتری جدید"}
                 </h2>
-               {user.role =='admin' &&<button
+               {isAdmin &&<button
                   onClick={() => setShowModal(true)}
                   className=" bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-200 flex items-center gap-2"
                 >
@@ -448,101 +575,137 @@ export default function Customers() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    نام کاربری مشتری *
-                  </label>
-                  <div className="relative">
+                {isAgent && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      توضیحات (اختیاری)
+                    </label>
+                    <textarea
+                      name="note"
+                      value={form.note}
+                      onChange={handleChange}
+                      className="w-full pl-4 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
+                      placeholder="توضیحات تکمیلی برای ادمین/کاربر"
+                      rows={3}
+                    />
+                  </div>
+                )}
+
+                {isAdmin && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      چرایی مشتری
+                    </label>
                     <input
                       type="text"
-                      name="username"
-                      value={form.username}
+                      name="supportStatus"
+                      value={form.supportStatus}
                       onChange={handleChange}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
-                      placeholder="مثال: customer01"
-                      required
+                      className="w-full pl-4 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
+                      placeholder="دلیل/وضعیت پشتیبانی مشتری"
                     />
-                    <span className="absolute left-3 top-2.5 text-gray-400 pointer-events-none">
-                      <User size={18} />
-                    </span>
                   </div>
-                </div>
+                )}
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    رمز عبور {editingCustomerId ? "(اختیاری برای تغییر)" : "*"}
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="password"
-                      name="password"
-                      value={form.password}
-                      onChange={handleChange}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
-                      placeholder={
-                        editingCustomerId
-                          ? "برای تغییر رمز وارد کنید"
-                          : "رمز عبور"
-                      }
-                      required={!editingCustomerId}
-                    />
-                    <span className="absolute left-3 top-2.5 text-gray-400 pointer-events-none">
-                      <Lock size={18} />
-                    </span>
-                  </div>
-                </div>
+                {!isAgent && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        نام کاربری مشتری *
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          name="username"
+                          value={form.username}
+                          onChange={handleChange}
+                          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
+                          placeholder="مثال: customer01"
+                          required
+                        />
+                        <span className="absolute left-3 top-2.5 text-gray-400 pointer-events-none">
+                          <User size={18} />
+                        </span>
+                      </div>
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    سقف لایسنس
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    name="licenseLimit"
-                    value={form.licenseLimit}
-                    onChange={handleChange}
-                    className="w-full pl-4 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
-                  />
-                </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        رمز عبور {editingCustomerId ? "(اختیاری برای تغییر)" : "*"}
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="password"
+                          name="password"
+                          value={form.password}
+                          onChange={handleChange}
+                          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
+                          placeholder={
+                            editingCustomerId
+                              ? "برای تغییر رمز وارد کنید"
+                              : "رمز عبور"
+                          }
+                          required={!editingCustomerId}
+                        />
+                        <span className="absolute left-3 top-2.5 text-gray-400 pointer-events-none">
+                          <Lock size={18} />
+                        </span>
+                      </div>
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    تاریخ شروع قرارداد
-                  </label>
-                  <div className="relative">
-                    <JalaliDatePicker
-                      value={form.contractStartDate}
-                      onChange={handleContractStartChange}
-                      placeholder="انتخاب تاریخ"
-                      className="w-full"
-                      inputClassName="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-right"
-                      format="jYYYY/jMM/jDD"
-                    />
-                    <span className="absolute left-3 top-2.5 text-gray-400 pointer-events-none">
-                      <Calendar size={18} />
-                    </span>
-                  </div>
-                </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        سقف لایسنس
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        name="licenseLimit"
+                        value={form.licenseLimit}
+                        onChange={handleChange}
+                        className="w-full pl-4 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
+                      />
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    تاریخ پایان قرارداد
-                  </label>
-                  <div className="relative">
-                    <JalaliDatePicker
-                      value={form.contractEndDate}
-                      onChange={handleDateChange}
-                      placeholder="انتخاب تاریخ"
-                      className="w-full"
-                      inputClassName="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-right"
-                      format="jYYYY/jMM/jDD"
-                    />
-                    <span className="absolute left-3 top-2.5 text-gray-400 pointer-events-none">
-                      <Calendar size={18} />
-                    </span>
-                  </div>
-                </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        تاریخ شروع قرارداد
+                      </label>
+                      <div className="relative">
+                        <JalaliDatePicker
+                          value={form.contractStartDate}
+                          onChange={handleContractStartChange}
+                          placeholder="انتخاب تاریخ"
+                          className="w-full"
+                          inputClassName="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-right"
+                          format="jYYYY/jMM/jDD"
+                        />
+                        <span className="absolute left-3 top-2.5 text-gray-400 pointer-events-none">
+                          <Calendar size={18} />
+                        </span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        تاریخ پایان قرارداد
+                      </label>
+                      <div className="relative">
+                        <JalaliDatePicker
+                          value={form.contractEndDate}
+                          onChange={handleDateChange}
+                          placeholder="انتخاب تاریخ"
+                          className="w-full"
+                          inputClassName="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-right"
+                          format="jYYYY/jMM/jDD"
+                        />
+                        <span className="absolute left-3 top-2.5 text-gray-400 pointer-events-none">
+                          <Calendar size={18} />
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 <div className="sticky bottom-0 bg-white/95 backdrop-blur-sm pt-3 pb-1 border-t border-gray-100">
                   <button
@@ -562,7 +725,11 @@ export default function Customers() {
                         ) : (
                           <Plus size={20} />
                         )}
-                        {editingCustomerId ? "ذخیره تغییرات" : "افزودن مشتری"}
+                        {isAgent
+                          ? "ثبت درخواست"
+                          : editingCustomerId
+                            ? "ذخیره تغییرات"
+                            : "افزودن مشتری"}
                       </>
                     )}
                   </button>
@@ -624,6 +791,11 @@ export default function Customers() {
                           مبلغ قرارداد
                         </th>
                         <th className="px-6 py-4 font-semibold">وضعیت انقضا</th>
+                        {isAdmin && (
+                          <th className="px-6 py-4 font-semibold">
+                            چرایی مشتری
+                          </th>
+                        )}
                         <th className="px-6 py-4 font-semibold">وضعیت</th>
                         <th className="px-6 py-4 font-semibold text-center">
                           عملیات
@@ -634,7 +806,7 @@ export default function Customers() {
                       {filteredCustomers.length === 0 ? (
                         <tr>
                           <td
-                            colSpan="9"
+                            colSpan={isAdmin ? "10" : "9"}
                             className="text-center py-8 text-gray-500"
                           >
                             {customers.length === 0
@@ -707,25 +879,45 @@ export default function Customers() {
                                   {daysInfo.text}
                                 </span>
                               </td>
+                              {isAdmin && (
+                                <td className="min-w-[160px] text-slate-700">
+                                  <OverflowTooltip
+                                    text={customer.supportStatus || "-"}
+                                    className="max-w-[140px]"
+                                  />
+                                </td>
+                              )}
                               <td className="whitespace-nowrap">
-                                <button
-                                  onClick={() => toggleStatus(customer)}
-                                  className={`inline-flex items-center gap-1.5 whitespace-nowrap text-sm font-medium ${
-                                    customer.isActive
-                                      ? "text-green-600"
-                                      : "text-red-600"
-                                  }`}
-                                >
-                                  {customer.isActive ? (
-                                    <>
-                                      <ToggleRight size={18} /> فعال
-                                    </>
-                                  ) : (
-                                    <>
-                                      <ToggleLeft size={18} /> غیرفعال
-                                    </>
-                                  )}
-                                </button>
+                                {isAdmin ? (
+                                  <button
+                                    onClick={() => toggleStatus(customer)}
+                                    className={`inline-flex items-center gap-1.5 whitespace-nowrap text-sm font-medium ${
+                                      customer.isActive
+                                        ? "text-green-600"
+                                        : "text-red-600"
+                                    }`}
+                                  >
+                                    {customer.isActive ? (
+                                      <>
+                                        <ToggleRight size={18} /> فعال
+                                      </>
+                                    ) : (
+                                      <>
+                                        <ToggleLeft size={18} /> غیرفعال
+                                      </>
+                                    )}
+                                  </button>
+                                ) : (
+                                  <span
+                                    className={`inline-flex items-center gap-1.5 whitespace-nowrap text-sm font-medium ${
+                                      customer.isActive
+                                        ? "text-green-600"
+                                        : "text-red-600"
+                                    }`}
+                                  >
+                                    {customer.isActive ? "فعال" : "غیرفعال"}
+                                  </span>
+                                )}
                               </td>
                               <td className="whitespace-nowrap text-center">
                                 <button
@@ -750,21 +942,24 @@ export default function Customers() {
                                 >
                                   <FileText size={18} />
                                 </button>
-                                <button
-                                  onClick={() => editCustomer(customer)}
-                                  className="text-blue-500 hover:text-blue-700 hover:bg-blue-50 p-2 rounded-lg transition-colors ml-2"
-                                  title="ویرایش مشتری"
-                                >
-                                  <Edit2 size={18} />
-                                </button>
-                                <button
-                                  onClick={() => deleteCustomer(customer.id)}
-                                  className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition-colors"
-                                  title="حذف مشتری"
-                             
-                                >
-                                  <Trash2 size={18} />
-                                </button>
+                                {isAdmin && (
+                                  <button
+                                    onClick={() => editCustomer(customer)}
+                                    className="text-blue-500 hover:text-blue-700 hover:bg-blue-50 p-2 rounded-lg transition-colors ml-2"
+                                    title="ویرایش مشتری"
+                                  >
+                                    <Edit2 size={18} />
+                                  </button>
+                                )}
+                                {isAdmin && (
+                                  <button
+                                    onClick={() => deleteCustomer(customer.id)}
+                                    className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition-colors"
+                                    title="حذف مشتری"
+                                  >
+                                    <Trash2 size={18} />
+                                  </button>
+                                )}
                               </td>
                             </tr>
                           );

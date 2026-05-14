@@ -12,30 +12,35 @@ import {
   Key,
   FileText,
   ChevronLeft,
+  Repeat,
 } from "lucide-react";
-import { clearAuth, getAuthUser } from "../utils/auth";
+import { canAccessPage, clearAuth, getAuthUser } from "../utils/auth";
 
 const adminMenuItems = [
-  { path: "/dashboard", label: "داشبورد", icon: LayoutDashboard },
-  { path: "/users", label: "کاربران", icon: Users },
-  { path: "/customers", label: "مشتریان", icon: Users },
-  { path: "/versions", label: "نسخه ها", icon: Box },
-  { path: "/licenses", label: "لایسنس ها", icon: Key },
-  { path: "/contracts", label: "قراردادها", icon: FileText },
-  { path: "/messages", label: "پیام ها", icon: MessageSquare },
+  { key: "dashboard", path: "/dashboard", label: "داشبورد", icon: LayoutDashboard },
+  { key: "users", path: "/users", label: "کاربران", icon: Users },
+  { key: "customers", path: "/customers", label: "مشتریان", icon: Users },
+  { key: "versions", path: "/versions", label: "نسخه ها", icon: Box },
+  { key: "licenses", path: "/licenses", label: "لایسنس ها", icon: Key },
+  { key: "contracts", path: "/contracts", label: "قراردادها", icon: FileText },
+  { key: "messages", path: "/messages", label: "پیام ها", icon: MessageSquare },
+  { key: "renewalRequests", path: "/renewal-requests", label: "درخواست تمدید", icon: Repeat },
 ];
 
 const customerMenuItems = [
-  { path: "/dashboard", label: "داشبورد", icon: LayoutDashboard },
-  { path: "/messages", label: "پیام ها", icon: MessageSquare },
+  { key: "dashboard", path: "/dashboard", label: "داشبورد", icon: LayoutDashboard },
+  { key: "licenses", path: "/licenses", label: "لایسنس ها", icon: Key },
+  { key: "contracts", path: "/contracts", label: "قراردادها", icon: FileText },
+  { key: "renewalRequests", path: "/renewal-requests", label: "درخواست تمدید", icon: Repeat },
+  { key: "messages", path: "/messages", label: "پیام ها", icon: MessageSquare },
 ];
 
 const agentMenuItems = [
-  { path: "/dashboard", label: "داشبورد", icon: LayoutDashboard },
-  { path: "/customers", label: "مشتریان", icon: Users },
-
-  { path: "/contracts", label: "قراردادهای من", icon: FileText },
-  { path: "/messages", label: "پیام ها", icon: MessageSquare },
+  { key: "dashboard", path: "/dashboard", label: "داشبورد", icon: LayoutDashboard },
+  { key: "customers", path: "/customers", label: "مشتریان", icon: Users },
+  { key: "contracts", path: "/contracts", label: "قراردادهای من", icon: FileText },
+  { key: "renewalRequests", path: "/renewal-requests", label: "درخواست تمدید", icon: Repeat },
+  { key: "messages", path: "/messages", label: "پیام ها", icon: MessageSquare },
 ];
 
 export default function DashboardLayout() {
@@ -74,9 +79,11 @@ export default function DashboardLayout() {
   }, []);
 
   const menuItems = useMemo(() => {
-    if (authUser?.role === "customer") return customerMenuItems;
-    if (authUser?.role === "agent") return agentMenuItems;
-    return adminMenuItems;
+    let baseMenu = adminMenuItems;
+    if (authUser?.role === "customer") baseMenu = customerMenuItems;
+    else if (authUser?.role === "agent") baseMenu = agentMenuItems;
+
+    return baseMenu.filter((item) => canAccessPage(authUser, item.key));
   }, [authUser]);
 
   const currentPage =

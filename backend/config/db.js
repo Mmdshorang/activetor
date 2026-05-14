@@ -1,6 +1,6 @@
 // src/config/db.js
 const { Sequelize } = require("sequelize");
-require("dotenv").config();
+require("./loadEnv")();
 
 const sequelize = new Sequelize(
   process.env.DB_NAME,

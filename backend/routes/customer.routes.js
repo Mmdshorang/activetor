@@ -1,11 +1,15 @@
 const router = require("express").Router();
 const db = require("../models");
 const bcrypt = require("bcryptjs");
+const { Op } = require("sequelize");
 const { auth, allowRoles } = require("../middleware/authorize");
 const { parseApiError } = require("../utils/apiError");
+const { normalizeIranPhone } = require("../utils/phone");
 
 router.use(auth);
 router.use(allowRoles("admin", "user", "agent"));
+
+const isAdmin = (req) => req.user?.role === "admin";
 
 const sanitizeCustomer = (customer) => {
   const json = customer.toJSON ? customer.toJSON() : customer;
@@ -20,6 +24,12 @@ const parseDateOrNull = (value) => {
   return parsed;
 };
 
+const parseBooleanValue = (value) => {
+  if (typeof value === "boolean") return value;
+  if (value === "true" || value === "1" || value === 1) return true;
+  if (value === "false" || value === "0" || value === 0) return false;
+  return null;
+};
 
 const calcDaysRemaining = (endDate) => {
   if (!endDate) return null;
@@ -29,21 +39,36 @@ const calcDaysRemaining = (endDate) => {
   now.setHours(0, 0, 0, 0);
   return Math.ceil((end - now) / (1000 * 60 * 60 * 24));
 };
+
+const ensureUniqueMobile = async (phone, excludeCustomerId = null) => {
+  const where = {
+    [Op.or]: [{ phone }, { username: phone }],
+  };
+
+  if (excludeCustomerId) {
+    where.id = { [Op.ne]: excludeCustomerId };
+  }
+
+  return db.Customer.findOne({ where });
+};
+
 router.post("/upload-customers", async (req, res) => {
   try {
-    const customersData = req.body; // فرض می‌کنیم req.body خودش یک آرایه از داده‌های مشتریان است
+    if (req.user.role === "agent") {
+      return res.status(403).json({ message: "نماینده مجاز به ثبت گروهی مشتری نیست" });
+    }
 
-    // بررسی می‌کنیم که ورودی یک آرایه باشد
+    const customersData = req.body;
     if (!Array.isArray(customersData)) {
       return res.status(400).json({
         message: "ورودی باید یک آرایه از مشتریان باشد.",
       });
     }
+
     const currentUserId = req.user.id;
     const createdCustomers = [];
     const errors = [];
 
-    // اگر ورودی یک آرایه است، روی آن حلقه می‌زنیم
     for (const customerData of customersData) {
       try {
         const {
@@ -56,17 +81,24 @@ router.post("/upload-customers", async (req, res) => {
           licenseLimit,
           contractStartDate,
           contractEndDate,
-          userId,
           isActive,
         } = customerData;
 
-        // اعتبارسنجی ورودی برای هر مشتری
         if (!fullName || !phone) {
           errors.push({
             customer: customerData,
             message: "نام و موبایل الزامی است",
           });
-          continue; // رفتن به مشتری بعدی در صورت خطا
+          continue;
+        }
+
+        const normalizedPhone = normalizeIranPhone(phone);
+        if (!normalizedPhone) {
+          errors.push({
+            customer: customerData,
+            message: "شماره موبایل معتبر نیست",
+          });
+          continue;
         }
 
         const normalizedLimit = Number(licenseLimit ?? 1);
@@ -78,8 +110,8 @@ router.post("/upload-customers", async (req, res) => {
           continue;
         }
 
-        const existingPhone = await db.Customer.findOne({ where: { phone } });
-        if (existingPhone) {
+        const duplicated = await ensureUniqueMobile(normalizedPhone);
+        if (duplicated) {
           errors.push({
             customer: customerData,
             message: "این شماره موبایل قبلا ثبت شده است",
@@ -87,27 +119,35 @@ router.post("/upload-customers", async (req, res) => {
           continue;
         }
 
-        const hashedPassword = await bcrypt.hash(String(phone), 10);
+        const normalizedIsActive = parseBooleanValue(isActive);
+        if (isActive !== undefined && normalizedIsActive === null) {
+          errors.push({
+            customer: customerData,
+            message: "وضعیت فعال بودن معتبر نیست",
+          });
+          continue;
+        }
+
+        const hashedPassword = await bcrypt.hash(String(normalizedPhone), 10);
 
         const newCustomer = await db.Customer.create({
           fullName,
-          phone,
+          phone: normalizedPhone,
           company: company || null,
           address: address || null,
-          supportStatus: supportStatus || null,
+          supportStatus: isAdmin(req) ? supportStatus || null : null,
           expireDate: parseDateOrNull(expireDate),
-          username: phone || null,
+          username: normalizedPhone,
           password: hashedPassword,
           licenseLimit: normalizedLimit,
           contractStartDate: parseDateOrNull(contractStartDate),
           contractEndDate: parseDateOrNull(contractEndDate || expireDate),
           userId: currentUserId,
-          isActive: isActive !== undefined ? Boolean(isActive) : true,
+          isActive: normalizedIsActive !== null ? normalizedIsActive : true,
         });
 
         createdCustomers.push(sanitizeCustomer(newCustomer));
       } catch (err) {
-        // خطاهای احتمالی دیگر در هنگام پردازش یک مشتری خاص
         errors.push({
           customer: customerData,
           message: parseApiError(err, "خطا در ایجاد مشتری"),
@@ -115,70 +155,46 @@ router.post("/upload-customers", async (req, res) => {
       }
     }
 
-    // ارسال پاسخ نهایی
     if (errors.length > 0) {
-      // اگر خطایی رخ داده است، هم مشتریان موفق و هم خطاها را برمی‌گردانیم
-      return res
-        .status(errors.length === customersData.length ? 400 : 207)
-        .json({
-          message: "برخی از مشتریان با خطا پردازش شدند.",
-          createdCustomers: createdCustomers,
-          errors: errors,
-        });
-    } else {
-      // اگر همه چیز موفقیت‌آمیز بود
-      res.status(201).json({
-        message: "مشتریان با موفقیت ایجاد شدند.",
-        createdCustomers: createdCustomers,
+      return res.status(errors.length === customersData.length ? 400 : 207).json({
+        message: "برخی از مشتریان با خطا پردازش شدند.",
+        createdCustomers,
+        errors,
       });
     }
+
+    return res.status(201).json({
+      message: "مشتریان با موفقیت ایجاد شدند.",
+      createdCustomers,
+    });
   } catch (err) {
-    res
-      .status(500)
-      .json({ message: parseApiError(err, "خطای کلی در پردازش درخواست") });
+    return res.status(500).json({
+      message: parseApiError(err, "خطای کلی در پردازش درخواست"),
+    });
   }
 });
-// دریافت لیست مشتریان
+
 router.get("/", async (req, res) => {
   try {
-    // 1. بررسی هویت کاربر (اگر از middleware استفاده نمی‌کنید، این بخش اجباری است)
     if (!req.user) {
       return res.status(401).json({ message: "کاربر احراز هویت نشده است" });
     }
 
     const userId = req.user.id;
     const userRole = req.user.role;
+    const whereCondition = userRole === "agent" ? { userId } : {};
 
-    // 2. تعریف شرط where بر اساس رول
-    let whereCondition = {};
-
-    if (userRole === "agent") {
-      // اگر کاربر ادمین نبود (یا دقیقاً ادمین نبود)، فقط مشتری‌های خودش را ببیند
-      // نکته: اگر می‌خواهید ادمین‌ها همه را ببینند و فقط ادمین‌ها استثنا باشند، این شرط کافی است.
-      // اگر می‌خواهید دقیقاً 'agent' باشد و 'admin' یا 'super-admin' دیگر باشند:
-      whereCondition = {
-        userId: userId,
-      };
-    } else {
-      // برای ادمین‌ها (admin, super-admin و...) همه مشتریان نمایش داده می‌شود
-      // شرط where خالی می‌ماند تا همه را برگرداند
-      whereCondition = {};
-    }
-
-    // 3. دریافت لیست مشتریان با شرط تعیین شده
     const customers = await db.Customer.findAll({
-      where: whereCondition, // اعمال شرط فیلتر
+      where: whereCondition,
       order: [["createdAt", "DESC"]],
     });
 
-    // 4. غنی‌سازی داده‌ها (همان منطق قبلی شما)
     const enrichedCustomers = await Promise.all(
       customers.map(async (customer) => {
         const safeCustomer = sanitizeCustomer(customer);
-
-        // اگر برای ایجنت‌ها نمی‌خواهید داده‌های حساس ادمین را لود کنید، می‌توانید اینجا هم شرط بگذارید
-        // اما معمولاً داده‌های مشتری (مثل قراردادها) برای ایجنت هم لازم است.
-
+        if (!isAdmin(req)) {
+          delete safeCustomer.supportStatus;
+        }
         const [latestContract, contractsCount] = await Promise.all([
           db.Contract.findOne({
             where: { customerId: customer.id },
@@ -190,12 +206,8 @@ router.get("/", async (req, res) => {
         return {
           ...safeCustomer,
           contractsCount,
-          latestContractAmount: latestContract
-            ? Number(latestContract.amount)
-            : null,
-          latestContractStartDate: latestContract
-            ? latestContract.startDate
-            : null,
+          latestContractAmount: latestContract ? Number(latestContract.amount) : null,
+          latestContractStartDate: latestContract ? latestContract.startDate : null,
           latestContractEndDate: latestContract ? latestContract.endDate : null,
           latestContractDaysRemaining: latestContract
             ? calcDaysRemaining(latestContract.endDate)
@@ -204,17 +216,20 @@ router.get("/", async (req, res) => {
       }),
     );
 
-    res.json(enrichedCustomers);
+    return res.json(enrichedCustomers);
   } catch (error) {
-    res
+    return res
       .status(500)
       .json({ message: parseApiError(error, "خطا در دریافت لیست مشتریان") });
   }
 });
 
-// افزودن مشتری جدید
 router.post("/", async (req, res) => {
   try {
+    if (req.user.role === "agent") {
+      return res.status(403).json({ message: "نماینده فقط می‌تواند درخواست مشتری ثبت کند" });
+    }
+
     const {
       fullName,
       phone,
@@ -222,26 +237,21 @@ router.post("/", async (req, res) => {
       address,
       supportStatus,
       expireDate,
-      username,
-      password,
       licenseLimit,
       contractStartDate,
       contractEndDate,
-      userId,
       isActive,
     } = req.body;
 
-    if (
-      !fullName ||
-      !phone ||
-      !username ||
-      password === undefined ||
-      password === null ||
-      String(password) === ""
-    ) {
+    if (!fullName || !phone) {
       return res.status(400).json({
-        message: "نام، موبایل، نام کاربری و رمز عبور الزامی است",
+        message: "نام و موبایل الزامی است",
       });
+    }
+
+    const normalizedPhone = normalizeIranPhone(phone);
+    if (!normalizedPhone) {
+      return res.status(400).json({ message: "شماره موبایل معتبر نیست" });
     }
 
     const normalizedLimit = Number(licenseLimit ?? 1);
@@ -251,52 +261,64 @@ router.post("/", async (req, res) => {
       });
     }
 
-
-    const existingUsername = await db.Customer.findOne({ where: { username } });
-    if (existingUsername) {
-      return res
-        .status(400)
-        .json({ message: "این نام کاربری قبلا ثبت شده است" });
+    const duplicated = await ensureUniqueMobile(normalizedPhone);
+    if (duplicated) {
+      return res.status(400).json({ message: "این شماره موبایل قبلا ثبت شده است" });
     }
 
-    const hashedPassword = await bcrypt.hash(String(password), 10);
+    const normalizedIsActive = parseBooleanValue(isActive);
+    if (isActive !== undefined && normalizedIsActive === null) {
+      return res.status(400).json({ message: "وضعیت فعال بودن معتبر نیست" });
+    }
+
+    const hashedPassword = await bcrypt.hash(String(normalizedPhone), 10);
     const currentUserId = req.user.id;
+
     const newCustomer = await db.Customer.create({
       fullName,
-      phone,
+      phone: normalizedPhone,
       company: company || null,
       address: address || null,
-      supportStatus: supportStatus || null,
+      supportStatus: isAdmin(req) ? supportStatus || null : null,
       expireDate: parseDateOrNull(expireDate),
-      username,
+      username: normalizedPhone,
       password: hashedPassword,
       licenseLimit: normalizedLimit,
       contractStartDate: parseDateOrNull(contractStartDate),
       contractEndDate: parseDateOrNull(contractEndDate || expireDate),
       userId: currentUserId,
-      isActive: isActive !== undefined ? Boolean(isActive) : true,
+      isActive: normalizedIsActive !== null ? normalizedIsActive : true,
     });
 
-    res.status(201).json(sanitizeCustomer(newCustomer));
+    return res.status(201).json(sanitizeCustomer(newCustomer));
   } catch (err) {
-    res.status(500).json({ message: parseApiError(err, "خطا در ایجاد مشتری") });
+    return res.status(500).json({ message: parseApiError(err, "خطا در ایجاد مشتری") });
   }
 });
 
-// ویرایش مشتری (برای تغییر وضعیت یا اطلاعات)
 router.put("/:id", async (req, res) => {
   try {
-    if (req.user.role === "agent" && customer.userId !== req.user.id) {
-      return res
-        .status(403)
-        .json({ message: "شما اجازه ویرایش این مشتری را ندارید" });
+    if (!isAdmin(req)) {
+      return res.status(403).json({ message: "فقط ادمین می‌تواند اطلاعات مشتری را ویرایش کند" });
     }
+
     const customer = await db.Customer.findByPk(req.params.id);
     if (!customer) {
       return res.status(404).json({ message: "مشتری یافت نشد" });
     }
 
     const updatePayload = { ...req.body };
+    if (!isAdmin(req)) {
+      delete updatePayload.supportStatus;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updatePayload, "isActive")) {
+      const normalizedIsActive = parseBooleanValue(updatePayload.isActive);
+      if (normalizedIsActive === null) {
+        return res.status(400).json({ message: "وضعیت فعال بودن معتبر نیست" });
+      }
+      updatePayload.isActive = normalizedIsActive;
+    }
 
     if (Object.prototype.hasOwnProperty.call(updatePayload, "password")) {
       if (
@@ -306,27 +328,27 @@ router.put("/:id", async (req, res) => {
       ) {
         delete updatePayload.password;
       } else {
-        updatePayload.password = await bcrypt.hash(
-          String(updatePayload.password),
-          10,
-        );
+        updatePayload.password = await bcrypt.hash(String(updatePayload.password), 10);
       }
     }
 
     if (Object.prototype.hasOwnProperty.call(updatePayload, "username")) {
-      if (!updatePayload.username) {
-        return res
-          .status(400)
-          .json({ message: "نام کاربری نمی‌تواند خالی باشد" });
+      updatePayload.phone = updatePayload.username;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updatePayload, "phone")) {
+      const normalizedPhone = normalizeIranPhone(updatePayload.phone);
+      if (!normalizedPhone) {
+        return res.status(400).json({ message: "شماره موبایل معتبر نیست" });
       }
-      const duplicateUsername = await db.Customer.findOne({
-        where: { username: updatePayload.username },
-      });
-      if (duplicateUsername && duplicateUsername.id !== customer.id) {
-        return res
-          .status(400)
-          .json({ message: "این نام کاربری قبلا ثبت شده است" });
+
+      const duplicated = await ensureUniqueMobile(normalizedPhone, customer.id);
+      if (duplicated) {
+        return res.status(400).json({ message: "این شماره موبایل قبلا ثبت شده است" });
       }
+
+      updatePayload.phone = normalizedPhone;
+      updatePayload.username = normalizedPhone;
     }
 
     if (Object.prototype.hasOwnProperty.call(updatePayload, "licenseLimit")) {
@@ -339,29 +361,44 @@ router.put("/:id", async (req, res) => {
       updatePayload.licenseLimit = normalizedLimit;
     }
 
-    if (
-      Object.prototype.hasOwnProperty.call(updatePayload, "contractStartDate")
-    ) {
-      updatePayload.contractStartDate = parseDateOrNull(
-        updatePayload.contractStartDate,
-      );
+    if (Object.prototype.hasOwnProperty.call(updatePayload, "contractStartDate")) {
+      updatePayload.contractStartDate = parseDateOrNull(updatePayload.contractStartDate);
     }
 
-    if (
-      Object.prototype.hasOwnProperty.call(updatePayload, "contractEndDate")
-    ) {
-      updatePayload.contractEndDate = parseDateOrNull(
-        updatePayload.contractEndDate,
-      );
+    if (Object.prototype.hasOwnProperty.call(updatePayload, "contractEndDate")) {
+      updatePayload.contractEndDate = parseDateOrNull(updatePayload.contractEndDate);
       updatePayload.expireDate = updatePayload.contractEndDate;
+    } else if (Object.prototype.hasOwnProperty.call(updatePayload, "expireDate")) {
+      updatePayload.expireDate = parseDateOrNull(updatePayload.expireDate);
     }
 
     await customer.update(updatePayload);
-    res.json(sanitizeCustomer(customer));
+    return res.json(sanitizeCustomer(customer));
   } catch (err) {
-    res
-      .status(500)
-      .json({ message: parseApiError(err, "خطا در ویرایش مشتری") });
+    return res.status(500).json({ message: parseApiError(err, "خطا در ویرایش مشتری") });
+  }
+});
+
+router.patch("/:id/activation", async (req, res) => {
+  try {
+    if (!isAdmin(req)) {
+      return res.status(403).json({ message: "فقط ادمین می‌تواند وضعیت مشتری را تغییر دهد" });
+    }
+
+    const customer = await db.Customer.findByPk(req.params.id);
+    if (!customer) {
+      return res.status(404).json({ message: "مشتری یافت نشد" });
+    }
+
+    const normalizedIsActive = parseBooleanValue(req.body?.isActive);
+    if (normalizedIsActive === null) {
+      return res.status(400).json({ message: "وضعیت فعال بودن معتبر نیست" });
+    }
+
+    await customer.update({ isActive: normalizedIsActive });
+    return res.json(sanitizeCustomer(customer));
+  } catch (err) {
+    return res.status(500).json({ message: parseApiError(err, "خطا در تغییر وضعیت مشتری") });
   }
 });
 
@@ -389,23 +426,24 @@ router.get("/:id/license-info", async (req, res) => {
   }
 });
 
-// حذف مشتری
 router.delete("/:id", async (req, res) => {
   try {
     const customer = await db.Customer.findByPk(req.params.id, {
-      paranoid: false, // برای اینکه اگر قبلاً soft delete شده باشد، پیدا شود
+      paranoid: false,
     });
     const role = req.user.role;
+
     if (!customer) {
       return res.status(404).json({ message: "مشتری یافت نشد" });
-    } else if (role !== "admin") {
+    }
+    if (role !== "admin") {
       return res.status(403).json({ message: "شما اجاره این کار رو ندارید" });
     }
 
     await customer.destroy();
-    res.json({ message: "مشتری با موفقیت حذف شد" });
+    return res.json({ message: "مشتری با موفقیت حذف شد" });
   } catch (err) {
-    res.status(500).json({ message: parseApiError(err, "خطا در حذف مشتری") });
+    return res.status(500).json({ message: parseApiError(err, "خطا در حذف مشتری") });
   }
 });
 

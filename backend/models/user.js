@@ -6,7 +6,12 @@ module.exports = (sequelize, DataTypes) => {
     password: DataTypes.STRING,
     phone: DataTypes.STRING,
     role: DataTypes.STRING,
-    isActive: { type: DataTypes.BOOLEAN, defaultValue: true }
+    isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
+    pagePermissions: {
+      type: DataTypes.JSON,
+      allowNull: false,
+      defaultValue: [],
+    },
   });
 
   // رابطه: هر ادمین چند مشتری داره

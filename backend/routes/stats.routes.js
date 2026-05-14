@@ -2,6 +2,7 @@
 const router = require("express").Router();
 const db = require("../models");
 const { auth } = require("../middleware/authorize");
+const { Op, fn, col, literal } = require("sequelize");
 
 router.use(auth);
 
@@ -13,6 +14,120 @@ const calcDaysRemaining = (endDate) => {
   now.setHours(0, 0, 0, 0);
   return Math.ceil((end - now) / (1000 * 60 * 60 * 24));
 };
+
+const startOfToday = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+const addDays = (date, days) => new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+
+const contractListIncludes = [
+  { model: db.Customer, as: "customer", attributes: ["id", "fullName", "username", "company", "isActive"] },
+  { model: db.User, as: "creator", attributes: ["id", "fullName", "username", "role", "isActive"] },
+];
+
+const enrichContract = (contract) => {
+  const json = contract.toJSON ? contract.toJSON() : contract;
+  return { ...json, daysRemaining: calcDaysRemaining(json.endDate) };
+};
+
+router.get("/dashboard-lists", async (req, res) => {
+  try {
+    const role = req.user?.role;
+    const today = startOfToday();
+    const days = Number(req.query?.days ?? 30);
+    const soonDays = Number.isFinite(days) && days > 0 ? Math.min(days, 365) : 30;
+    const soonUntil = addDays(today, soonDays);
+
+    // ----- Active systems (based on active licenses) -----
+    // We return grouped list per systemName to use as a "systems" list in dashboard.
+    const licenseWhere = { isActive: true };
+    const licenseInclude = [];
+
+    if (role === "customer") {
+      licenseWhere.customerId = req.user.id;
+    } else if (role === "agent") {
+      licenseInclude.push({
+        model: db.Customer,
+        as: "customer",
+        attributes: [],
+        where: { userId: req.user.id },
+        required: true,
+      });
+    }
+
+    const activeSystems = await db.License.findAll({
+      where: licenseWhere,
+      include: licenseInclude,
+      attributes: [
+        "systemName",
+        [fn("COUNT", col("License.id")), "activeLicenses"],
+        [fn("COUNT", fn("DISTINCT", col("License.customerId"))), "customersCount"],
+        [fn("MAX", col("License.expireDate")), "latestExpireDate"],
+      ],
+      group: ["systemName"],
+      order: [[literal("activeLicenses"), "DESC"]],
+      limit: 50,
+    });
+
+    const normalizedActiveSystems = activeSystems.map((row) => {
+      const json = row.toJSON ? row.toJSON() : row;
+      return {
+        systemName: json.systemName,
+        activeLicenses: Number(json.activeLicenses || 0),
+        customersCount: Number(json.customersCount || 0),
+        latestExpireDate: json.latestExpireDate || null,
+      };
+    });
+
+    // ----- Contracts (active + expiring soon) -----
+    const contractWhereBase = {};
+    if (role === "customer") {
+      contractWhereBase.customerId = req.user.id;
+    } else if (role === "agent") {
+      contractWhereBase.userId = req.user.id;
+    }
+
+    const activeContractsWhere = {
+      ...contractWhereBase,
+      status: "active",
+      endDate: { [Op.gte]: today },
+    };
+
+    const expiringContractsWhere = {
+      ...contractWhereBase,
+      status: "active",
+      endDate: { [Op.between]: [today, soonUntil] },
+    };
+
+    const [activeContracts, expiringSoonContracts] = await Promise.all([
+      db.Contract.findAll({
+        where: activeContractsWhere,
+        include: contractListIncludes,
+        order: [["endDate", "ASC"]],
+        limit: 50,
+      }),
+      db.Contract.findAll({
+        where: expiringContractsWhere,
+        include: contractListIncludes,
+        order: [["endDate", "ASC"]],
+        limit: 50,
+      }),
+    ]);
+
+    return res.json({
+      activeSystems: normalizedActiveSystems,
+      activeContracts: activeContracts.map(enrichContract),
+      expiringSoonContracts: expiringSoonContracts.map(enrichContract),
+      soonDays,
+    });
+  } catch (error) {
+    console.error("Error fetching dashboard lists:", error);
+    return res.status(500).json({ message: "خطا در دریافت لیست های داشبورد" });
+  }
+});
 
 // روت ۱: آمار کلی
 router.get("/dashboard-stats", async (req, res) => {
