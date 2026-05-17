@@ -191,7 +191,7 @@ export default function Licenses() {
 
         // استفاده از await برای صبر کردن پاسخ
         const res = await axios.post(
-          "http://192.168.1.16:4000/activecode",
+          "http://109.201.15.164:4000/activecode",
           externalFormData
         );
 
