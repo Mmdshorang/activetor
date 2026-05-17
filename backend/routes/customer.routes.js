@@ -57,7 +57,7 @@ router.post("/upload-customers", async (req, res) => {
     if (req.user.role === "agent") {
       return res.status(403).json({ message: "نماینده مجاز به ثبت گروهی مشتری نیست" });
     }
-
+    
     const customersData = req.body;
     if (!Array.isArray(customersData)) {
       return res.status(400).json({
@@ -84,6 +84,7 @@ router.post("/upload-customers", async (req, res) => {
           isActive,
         } = customerData;
 
+        // 1. بررسی الزامی بودن نام و موبایل
         if (!fullName || !phone) {
           errors.push({
             customer: customerData,
@@ -92,15 +93,28 @@ router.post("/upload-customers", async (req, res) => {
           continue;
         }
 
-        const normalizedPhone = normalizeIranPhone(phone);
+        // 2. نرمال‌سازی و اضافه کردن خودکار صفر اول
+        // ابتدا شماره را به رشته تبدیل می‌کنیم و فاصله‌های احتمالی را حذف می‌کنیم
+        let rawPhone = String(phone).replace(/\s+/g, '');
+        
+        // بررسی می‌کنیم که آیا شماره با 0 شروع می‌شود یا خیر
+        // اگر شروع نمی‌شود، یک 0 به اول آن اضافه می‌کنیم
+        if (!rawPhone.startsWith('0')) {
+          rawPhone = '0' + rawPhone;
+        }
+
+        // حالا شماره را به تابع نرمال‌ساز می‌دهیم تا چک کند فرمت درستی دارد (مثلا 11 رقم است)
+        const normalizedPhone = normalizeIranPhone(rawPhone);
+
         if (!normalizedPhone) {
           errors.push({
             customer: customerData,
-            message: "شماره موبایل معتبر نیست",
+            message: "شماره موبایل معتبر نیست (باید 11 رقم و با 0 شروع شود)",
           });
           continue;
         }
 
+        // 3. بررسی سقف لایسنس
         const normalizedLimit = Number(licenseLimit ?? 1);
         if (!Number.isInteger(normalizedLimit) || normalizedLimit < 1) {
           errors.push({
@@ -110,6 +124,7 @@ router.post("/upload-customers", async (req, res) => {
           continue;
         }
 
+        // 4. بررسی تکراری نبودن شماره
         const duplicated = await ensureUniqueMobile(normalizedPhone);
         if (duplicated) {
           errors.push({
@@ -119,6 +134,7 @@ router.post("/upload-customers", async (req, res) => {
           continue;
         }
 
+        // 5. بررسی وضعیت فعال بودن
         const normalizedIsActive = parseBooleanValue(isActive);
         if (isActive !== undefined && normalizedIsActive === null) {
           errors.push({
@@ -128,16 +144,17 @@ router.post("/upload-customers", async (req, res) => {
           continue;
         }
 
+        // 6. ایجاد کاربر جدید
         const hashedPassword = await bcrypt.hash(String(normalizedPhone), 10);
-
+        
         const newCustomer = await db.Customer.create({
           fullName,
-          phone: normalizedPhone,
+          phone: normalizedPhone, // شماره با صفر اول ذخیره می‌شود
           company: company || null,
           address: address || null,
           supportStatus: isAdmin(req) ? supportStatus || null : null,
           expireDate: parseDateOrNull(expireDate),
-          username: normalizedPhone,
+          username: normalizedPhone, // نام کاربری هم همان شماره است
           password: hashedPassword,
           licenseLimit: normalizedLimit,
           contractStartDate: parseDateOrNull(contractStartDate),
@@ -155,6 +172,7 @@ router.post("/upload-customers", async (req, res) => {
       }
     }
 
+    // اگر همه خطا بودند 400، اگر برخی خطا داشتند 207
     if (errors.length > 0) {
       return res.status(errors.length === customersData.length ? 400 : 207).json({
         message: "برخی از مشتریان با خطا پردازش شدند.",

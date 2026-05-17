@@ -346,9 +346,9 @@ export default function Dashboard() {
               </div>
 
               <div className="lg:col-span-3 flex items-center justify-between gap-3">
-                <p className="text-sm text-slate-500">
+                {/* <p className="text-sm text-slate-500">
                   کرون: <span className="font-mono">{smsSettings.cron}</span> ، تایم‌زون: <span className="font-mono">{smsSettings.timezone}</span>
-                </p>
+                </p> */}
                 <button
                   type="button"
                   className="panel-btn"
