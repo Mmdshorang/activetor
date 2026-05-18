@@ -3,7 +3,7 @@ import moment from "jalali-moment";
 import { Calendar, X, ChevronLeft, ChevronRight } from "lucide-react";
 
 // تنظیم زبان مومنت روی فارسی
-moment.locale("fa");
+moment.locale("fa", { useGregorianParser: true, dialect: "persian-modern" });
 
 // تعریف تایپ‌ها با استفاده از JSDoc برای سازگاری با JSX
 /**

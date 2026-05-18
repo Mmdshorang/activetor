@@ -68,6 +68,25 @@ const formatMoney = (value) => {
   return num.toLocaleString("fa-IR");
 };
 
+const getAxiosErrorMessage = (error, fallbackMessage, requestPath) => {
+  const baseUrl = api?.defaults?.baseURL || "";
+
+  if (error?.response) {
+    const message =
+      error.response?.data?.message ||
+      error.response?.data?.error ||
+      fallbackMessage;
+    return `${message} (HTTP ${error.response.status})`;
+  }
+
+  if (error?.request) {
+    const target = requestPath ? `${baseUrl}${requestPath}` : baseUrl || "API";
+    return `عدم اتصال به سرور. آدرس: ${target}`;
+  }
+
+  return error?.message || fallbackMessage;
+};
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [stats, setStats] = useState({
@@ -81,6 +100,9 @@ export default function Dashboard() {
   const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(true);
   const [listsLoading, setListsLoading] = useState(false);
+  const [listsLoaded, setListsLoaded] = useState(false);
+  const [listsError, setListsError] = useState("");
+  const [statsError, setStatsError] = useState("");
   const [dashboardLists, setDashboardLists] = useState({
     activeSystems: [],
     activeContracts: [],
@@ -98,6 +120,7 @@ export default function Dashboard() {
 
     const fetchData = async () => {
       try {
+        setStatsError("");
         const statsReq = api.get("/stats/dashboard-stats");
         const activityReq = user?.role === "customer" ? Promise.resolve({ data: [] }) : api.get("/stats/recent-activity");
 
@@ -106,6 +129,7 @@ export default function Dashboard() {
         setActivity(activityRes.data);
       } catch (error) {
         console.error("Error fetching data:", error);
+        setStatsError(getAxiosErrorMessage(error, "خطا در دریافت آمار داشبورد", "/stats/dashboard-stats"));
       } finally {
         setLoading(false);
       }
@@ -113,6 +137,25 @@ export default function Dashboard() {
 
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (!authUser || authUser.role === "customer") return;
+    const bootstrapLists = async () => {
+      try {
+        setListsError("");
+        setListsLoading(true);
+        const res = await api.get("/stats/dashboard-lists?days=30");
+        setDashboardLists(res.data);
+        setListsLoaded(true);
+      } catch (error) {
+        setListsError(getAxiosErrorMessage(error, "خطا در دریافت لیست های داشبورد", "/stats/dashboard-lists?days=30"));
+      } finally {
+        setListsLoading(false);
+      }
+    };
+
+    bootstrapLists();
+  }, [authUser]);
 
   const loadSmsSettings = async () => {
     if (smsSettingsLoading) return;
@@ -161,15 +204,18 @@ export default function Dashboard() {
 
   const openList = async (type) => {
     setListModal({ open: true, type });
-    if (dashboardLists.activeSystems.length > 0 || dashboardLists.activeContracts.length > 0 || dashboardLists.expiringSoonContracts.length > 0) {
+    if (listsLoaded) {
       return;
     }
     try {
+      setListsError("");
       setListsLoading(true);
       const res = await api.get("/stats/dashboard-lists?days=30");
       setDashboardLists(res.data);
+      setListsLoaded(true);
     } catch (error) {
       console.error("Error fetching dashboard lists:", error);
+      setListsError(getAxiosErrorMessage(error, "خطا در دریافت لیست های داشبورد", "/stats/dashboard-lists?days=30"));
     } finally {
       setListsLoading(false);
     }
@@ -257,6 +303,13 @@ export default function Dashboard() {
           </button>
         )}
       </div>
+
+      {statsError && (
+        <div className="panel-alert-error flex items-center gap-2">
+          <AlertCircle size={16} />
+          {statsError}
+        </div>
+      )}
 
       <div className={`grid grid-cols-1 md:grid-cols-2 ${summary.length > 3 ? "xl:grid-cols-4" : "xl:grid-cols-3"} gap-4`}>
         {summary.map((item) => (
@@ -367,25 +420,32 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <ClickableStatCard
             title="سیستم های فعال"
-            value={(dashboardLists.activeSystems?.length || 0) || "—"}
+            value={listsLoaded ? (dashboardLists.activeSystems?.length ?? 0) : "—"}
             icon={KeyRound}
             color="bg-sky-700"
             onClick={() => openList("systems")}
           />
           <ClickableStatCard
             title="قراردادهای فعال"
-            value={(dashboardLists.activeContracts?.length || 0) || "—"}
+            value={listsLoaded ? (dashboardLists.activeContracts?.length ?? 0) : "—"}
             icon={FileText}
             color="bg-emerald-600"
             onClick={() => openList("activeContracts")}
           />
           <ClickableStatCard
             title="قراردادهای نزدیک پایان"
-            value={(dashboardLists.expiringSoonContracts?.length || 0) || "—"}
+            value={listsLoaded ? (dashboardLists.expiringSoonContracts?.length ?? 0) : "—"}
             icon={Clock3}
             color="bg-amber-600"
             onClick={() => openList("expiringSoon")}
           />
+        </div>
+      )}
+
+      {showListsSection && listsError && (
+        <div className="panel-alert-error flex items-center gap-2">
+          <AlertCircle size={16} />
+          {listsError}
         </div>
       )}
 

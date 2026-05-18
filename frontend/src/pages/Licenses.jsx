@@ -1,15 +1,12 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import JalaliDatePicker from "../components/DatePicker";
-import moment from "jalali-moment";
 import {
   Search,
   KeyRound,
-  Calendar,
   BadgeDollarSign,
   Save,
-  Edit2,
-  Trash2,
+  Plus,
+  X,
   Loader2,
   AlertCircle,
   CheckCircle2,
@@ -20,33 +17,35 @@ import OverflowTooltip from "../components/OverflowTooltip";
 import axios from "axios";
 import qs from "qs";
 import { getAuthUser } from "../utils/auth";
+import {
+  ACTIVECODE_SERVERS,
+  buildActivecodeUrl,
+  getActivecodeServerKey,
+  resolveActivecodeServer,
+  setActivecodeServerKey,
+} from "../config/externalServices";
 
 export default function Licenses() {
   const authUser = getAuthUser();
   const canManageAll = authUser?.role === "admin" || authUser?.role === "user";
-  const toGregorianDate = (jalaliOrDate) => {
-    if (!jalaliOrDate) return null;
-    const jalaliParsed = moment(jalaliOrDate, "jYYYY/jMM/jDD", true);
-    if (jalaliParsed.isValid())
-      return jalaliParsed.locale("en").format("YYYY-MM-DD");
-    const normalParsed = moment(jalaliOrDate);
-    return normalParsed.isValid() ? normalParsed.format("YYYY-MM-DD") : null;
-  };
-
-  const toJalaliDate = (dateValue) => {
-    if (!dateValue) return null;
-    const parsed = moment(dateValue);
-    return parsed.isValid()
-      ? parsed.locale("fa").format("jYYYY/jMM/jDD")
-      : null;
-  };
-
+  const isAdmin = authUser?.role === "admin";
+  const [activecodeServerKey, setActivecodeServerKeyState] = useState(() =>
+    getActivecodeServerKey(),
+  );
+  const activecodeServer = useMemo(
+    () => resolveActivecodeServer(activecodeServerKey),
+    [activecodeServerKey],
+  );
+  const activecodeUrl = useMemo(
+    () => buildActivecodeUrl(activecodeServer.baseUrl),
+    [activecodeServer.baseUrl],
+  );
   const [licenses, setLicenses] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [versions, setVersions] = useState([]);
   const [licenseInfo, setLicenseInfo] = useState(null);
   const [selectedCustomer, setSelectedCustomer] = useState("");
-  const [editingId, setEditingId] = useState(null);
+  const [formOpen, setFormOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -58,12 +57,17 @@ export default function Licenses() {
     code1: "",
     code2: "",
     code3: "",
-    expireDate: null,
     customerId: "",
     licenseId: "",
   });
 
   const [searchParams] = useSearchParams();
+
+  const selectedCustomerItem = useMemo(() => {
+    const id = String(form.customerId || selectedCustomer || "");
+    if (!id) return null;
+    return customers.find((c) => String(c.id) === id) || null;
+  }, [customers, form.customerId, selectedCustomer]);
 
   const loadCustomers = async () => {
     const res = await api.get("/customers");
@@ -138,16 +142,25 @@ export default function Licenses() {
   };
 
   const resetForm = () => {
-    setEditingId(null);
     setForm({
       systemName: "",
       version: "",
       code1: "",
       code2: "",
       code3: "",
-      expireDate: null,
       customerId: selectedCustomer,
     });
+  };
+
+  const openCreateForm = () => {
+    resetForm();
+    setFormOpen(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const closeForm = () => {
+    setFormOpen(false);
+    resetForm();
   };
 
   const saveLicense = async (e) => {
@@ -159,8 +172,8 @@ export default function Licenses() {
       return;
     }
     
-    // اگر در حالت ویرایش نیستیم، ظرفیت را چک کن
-    if (!editingId && licenseInfo && licenseInfo.count >= licenseInfo.limit) {
+    // ظرفیت را چک کن
+    if (licenseInfo && licenseInfo.count >= licenseInfo.limit) {
       setError("ظرفیت لایسنس این مشتری پر شده");
       return;
     }
@@ -172,46 +185,54 @@ export default function Licenses() {
       // آماده‌سازی داده‌ها
       const payload = {
         ...form,
-        expireDate: toGregorianDate(form.expireDate),
       };
 
-      if (editingId) {
-        // --- حالت ویرایش ---
-        await api.put(`/licenses/${editingId}`, payload);
-        setSuccess("لایسنس با موفقیت ویرایش شد");
-      } else {
-        // --- حالت ثبت جدید ---
-        
-        // مرحله اول: دریافت لایسنس از API خارجی
-        const externalFormData = qs.stringify({
-          key1: form.code1,
-          key2: form.code2,
-          key3: form.code3,
-        });
+      // --- حالت ثبت جدید ---
 
-        // استفاده از await برای صبر کردن پاسخ
-        const res = await axios.post(
-          "http://109.201.15.164:4000/activecode",
-          externalFormData
-        );
+      // مرحله اول: دریافت لایسنس از API خارجی
+      const activatorUser =
+        authUser?.fullName || authUser?.username || authUser?.user || "";
 
-        // بررسی وضعیت پاسخ (axios معمولاً اگر کد خطا نباشد ریزولت می‌شود، اما چک کردن ok خوب است)
-        if (!res.data || !res.data.Message) {
-            throw new Error("پاسخ نامعتبر از سرور لایسنس");
-        }
+      const customerName = selectedCustomerItem?.fullName || "";
+      const customerShop = selectedCustomerItem?.company || "";
+      const customerMobile = selectedCustomerItem?.phone || "";
+      const customerAddress = selectedCustomerItem?.address || "";
 
-        const licenseIdFromServer = res.data.Message; // یا res.data.message بسته به ساختار API شما
+      const externalFormData = qs.stringify({
+        user: activatorUser,
+        name: customerName,
+        shop: customerShop,
+        mobile: customerMobile,
+        key1: form.code1,
+        key2: form.code2,
+        key3: form.code3,
+        code: customerAddress,
+      });
 
-        // مرحله دوم: ذخیره در دیتابیس خودمان
-        const finalPayload = {
-          ...payload,
-          licenseId: licenseIdFromServer
-        };
-
-        await api.post("/licenses", finalPayload);
-        
-        setSuccess("لایسنس با موفقیت ثبت شد");
+      // استفاده از await برای صبر کردن پاسخ
+      if (!activecodeUrl) {
+        throw new Error("آدرس سرور لایسنس تنظیم نشده است");
       }
+
+      const res = await axios.post(activecodeUrl, externalFormData, {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      });
+
+      if (!res.data || !res.data.Message) {
+        throw new Error("پاسخ نامعتبر از سرور لایسنس");
+      }
+
+      const licenseIdFromServer = res.data.Message;
+
+      // مرحله دوم: ذخیره در دیتابیس خودمان
+      const finalPayload = {
+        ...payload,
+        licenseId: licenseIdFromServer,
+      };
+
+      await api.post("/licenses", finalPayload);
+
+      setSuccess("لایسنس با موفقیت ثبت شد");
 
       // ریست کردن فرم و لود مجدد لیست‌ها
       resetForm();
@@ -222,51 +243,19 @@ export default function Licenses() {
 
     } catch (error) {
       console.error("Error saving license:", error);
-      
-      // اگر خطا از سمت API خارجی بوده باشد، پیام مناسب نمایش دهیم
-      if (error.response && error.response.status === 400) {
-          setError("کد لایسنس نامعتبر است یا منقضی شده");
+
+      if (error?.response) {
+        setError(
+          error.response?.data?.message ||
+            "خطا در ذخیره لایسنس. لطفاً اتصال اینترنت یا صحت کدها را بررسی کنید.",
+        );
+      } else if (error?.message) {
+        setError(error.message);
       } else {
-          setError("خطا در ذخیره لایسنس. لطفاً اتصال اینترنت یا صحت کدها را بررسی کنید.");
+        setError(
+          "خطا در ذخیره لایسنس. لطفاً اتصال اینترنت یا صحت کدها را بررسی کنید.",
+        );
       }
-    } finally {
-      setLoading(false);
-    }
-  };
-  const editLicense = (license) => {
-    if (!canManageAll) {
-      setError("فقط ادمین یا کاربر می‌تواند لایسنس را ویرایش کند");
-      return;
-    }
-    setEditingId(license.id);
-    setForm({
-      systemName: license.systemName,
-      version: license.version,
-      code1: license.code1,
-      code2: license.code2 || "",
-      code3: license.code3 || "",
-      expireDate: toJalaliDate(license.expireDate),
-      customerId: String(license.customerId || selectedCustomer || ""),
-    });
-  };
-
-  const deleteLicense = async (id) => {
-    if (!canManageAll) {
-      setError("فقط ادمین یا کاربر می‌تواند لایسنس را حذف کند");
-      return;
-    }
-    if (!window.confirm("آیا این لایسنس حذف شود؟")) return;
-
-    try {
-      setLoading(true);
-      await api.delete(`/licenses/${id}`);
-      setSuccess("لایسنس حذف شد");
-      await Promise.all([
-        loadLicenses(selectedCustomer),
-        loadLicenseInfo(selectedCustomer),
-      ]);
-    } catch {
-      setError("خطا در حذف لایسنس");
     } finally {
       setLoading(false);
     }
@@ -329,6 +318,39 @@ export default function Licenses() {
         </div>
       </div>
 
+      {isAdmin && (
+        <div className="panel-card p-4">
+          <label className="panel-label">سرور لایسنس (ActiveCode)</label>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="flex gap-2">
+              {ACTIVECODE_SERVERS.map((s) => {
+                const selected = s.key === activecodeServerKey;
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    onClick={() => {
+                      setActivecodeServerKeyState(s.key);
+                      setActivecodeServerKey(s.key);
+                    }}
+                    className={selected ? "panel-btn-primary" : "panel-btn-secondary"}
+                  >
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="text-xs text-slate-500">
+              آدرس انتخاب‌شده:{" "}
+              <span dir="ltr" className="font-mono text-slate-700 break-all">
+                {activecodeUrl || "-"}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {licenseInfo && (
         <div className="panel-card p-4">
           <p className="text-sm text-slate-700 flex items-center gap-2">
@@ -354,248 +376,209 @@ export default function Licenses() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-        <div className="xl:col-span-1">
-          <div className="panel-card p-5 xl:sticky xl:top-24">
-            <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-              {editingId ? (
-                <Edit2 size={18} className="text-amber-600" />
-              ) : (
-                <Save size={18} className="text-teal-700" />
-              )}
-              {editingId ? "ویرایش لایسنس" : "ثبت لایسنس جدید"}
-            </h2>
-
-            <form onSubmit={saveLicense} className="space-y-3">
+      {canManageAll && (
+        <div className="panel-card p-5">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="flex items-start gap-2">
+              <Save size={18} className="text-teal-700 mt-0.5" />
               <div>
-                <label className="panel-label">نام سیستم</label>
-                <input
-                  name="systemName"
-                  value={form.systemName}
-                  onChange={handleChange}
-                  className="panel-input"
-                  placeholder="مثال: سامانه مدیریت"
-                />
+                <h2 className="text-lg font-bold text-slate-900">ثبت لایسنس جدید</h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  برای نمایش بهتر جدول، فرم در بالای صفحه باز/بسته می‌شود.
+                </p>
               </div>
+            </div>
 
-              <div>
-                <label className="panel-label">نسخه</label>
-                <SearchableSelect
-                  value={form.version}
-                  onChange={(value) =>
-                    setForm((prev) => ({ ...prev, version: value }))
-                  }
-                  options={versionOptions}
-                  placeholder="انتخاب نسخه"
-                />
-              </div>
-
-              <div>
-                <label className="panel-label">کد اصلی</label>
-                <input
-                  name="code1"
-                  value={form.code1}
-                  onChange={handleChange}
-                  className="panel-input"
-                  placeholder="Code 1"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="panel-label">کد دوم</label>
-                  <input
-                    name="code2"
-                    value={form.code2}
-                    onChange={handleChange}
-                    className="panel-input"
-                    placeholder="Code 2"
-                  />
-                </div>
-                <div>
-                  <label className="panel-label">کد سوم</label>
-                  <input
-                    name="code3"
-                    value={form.code3}
-                    onChange={handleChange}
-                    className="panel-input"
-                    placeholder="Code 3"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="panel-label">تاریخ انقضا</label>
-                <div className="relative">
-                  <JalaliDatePicker
-                    value={form.expireDate}
-                    onChange={(d) => setForm({ ...form, expireDate: d })}
-                    inputClassName="panel-input"
-                    className="w-full"
-                  />
-                  <Calendar
-                    size={16}
-                    className="absolute left-3 top-3 text-slate-400 pointer-events-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="panel-label">مشتری</label>
-                <SearchableSelect
-                  value={form.customerId}
-                  onChange={(value) =>
-                    setForm((prev) => ({ ...prev, customerId: value }))
-                  }
-                  options={customerOptions}
-                  placeholder="انتخاب مشتری"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="panel-btn-primary w-full"
-                disabled={loading}
-              >
-                {loading ? (
-                  <Loader2 className="animate-spin" size={16} />
-                ) : editingId ? (
-                  <Edit2 size={16} />
-                ) : (
-                  <Save size={16} />
-                )}
-                {editingId ? "ذخیره تغییرات" : "ثبت لایسنس"}
-              </button>
-
-              {editingId && (
+            <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  onClick={resetForm}
-                  className="panel-btn-secondary w-full"
+                  onClick={() => {
+                    if (formOpen) {
+                      closeForm();
+                      return;
+                    }
+                    openCreateForm();
+                  }}
+                  className="panel-btn-primary"
+                  disabled={loading}
                 >
-                  انصراف از ویرایش
+                  {formOpen ? <X size={18} /> : <Plus size={18} />}
+                  {formOpen ? "بستن فرم" : "ثبت لایسنس"}
                 </button>
-              )}
-            </form>
+              </div>
+            </div>
+
+          {formOpen && (
+            <div className="mt-6 border-t border-slate-100 pt-6">
+              <form onSubmit={saveLicense} className="space-y-3">
+                <div>
+                  <label className="panel-label">نام سیستم</label>
+                  <input
+                    name="systemName"
+                    value={form.systemName}
+                    onChange={handleChange}
+                    className="panel-input"
+                    placeholder="مثال: سامانه مدیریت"
+                  />
+                </div>
+
+                <div>
+                  <label className="panel-label">نسخه</label>
+                  <SearchableSelect
+                    value={form.version}
+                    onChange={(value) =>
+                      setForm((prev) => ({ ...prev, version: value }))
+                    }
+                    options={versionOptions}
+                    placeholder="انتخاب نسخه"
+                  />
+                </div>
+
+                <div>
+                  <label className="panel-label">کد اصلی</label>
+                  <input
+                    name="code1"
+                    value={form.code1}
+                    onChange={handleChange}
+                    className="panel-input"
+                    placeholder="Code 1"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="panel-label">کد دوم</label>
+                    <input
+                      name="code2"
+                      value={form.code2}
+                      onChange={handleChange}
+                      className="panel-input"
+                      placeholder="Code 2"
+                    />
+                  </div>
+                  <div>
+                    <label className="panel-label">کد سوم</label>
+                    <input
+                      name="code3"
+                      value={form.code3}
+                      onChange={handleChange}
+                      className="panel-input"
+                      placeholder="Code 3"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="panel-label">مشتری</label>
+                  <SearchableSelect
+                    value={form.customerId}
+                    onChange={(value) =>
+                      setForm((prev) => ({ ...prev, customerId: value }))
+                    }
+                    options={customerOptions}
+                    placeholder="انتخاب مشتری"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="panel-btn-primary w-full"
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <Loader2 className="animate-spin" size={16} />
+                  ) : (
+                    <Save size={16} />
+                  )}
+                  ثبت لایسنس
+                </button>
+              </form>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="panel-card overflow-hidden">
+        <div className="p-4 border-b border-slate-100">
+          <div className="relative w-full md:w-80">
+            <Search className="absolute right-3 top-3 text-slate-400" size={16} />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="جستجو بر اساس سیستم، مشتری یا کد"
+              className="panel-input pr-9"
+            />
           </div>
         </div>
 
-        <div className="xl:col-span-2 panel-card overflow-hidden">
-          <div className="p-4 border-b border-slate-100">
-            <div className="relative w-full md:w-80">
-              <Search
-                className="absolute right-3 top-3 text-slate-400"
-                size={16}
-              />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="جستجو بر اساس سیستم، مشتری یا کد"
-                className="panel-input pr-9"
-              />
-            </div>
-          </div>
-
-          <div className="panel-table-wrap max-h-[65vh]">
-            <table className="panel-table">
-              <thead>
+        <div className="panel-table-wrap">
+          <table className="panel-table">
+            <thead>
+              <tr>
+                <th>سیستم</th>
+                <th>نسخه</th>
+                <th>مشتری</th>
+                <th>کد اصلی</th>
+                <th>شناسه لایسنس</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && licenses.length === 0 ? (
                 <tr>
-                  <th>سیستم</th>
-                  <th>نسخه</th>
-                  <th>مشتری</th>
-                  <th>کد اصلی</th>
-                      <th>انقضا</th>
-                      <th>عملیات</th>
-                  <th>شناسه لایسنس</th>
+                  <td colSpan="5" className="py-8 text-center text-slate-500">
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="animate-spin" size={16} />
+                      در حال بارگذاری...
+                    </span>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {loading && licenses.length === 0 ? (
-                  <tr>
-                    <td colSpan="7" className="py-8 text-center text-slate-500">
-                      <span className="inline-flex items-center gap-2">
-                        <Loader2 className="animate-spin" size={16} />
-                        در حال بارگذاری...
-                      </span>
+              ) : filteredLicenses.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="py-8 text-center text-slate-500">
+                    نتیجه ای یافت نشد.
+                  </td>
+                </tr>
+              ) : (
+                filteredLicenses.map((license) => (
+                  <tr key={license.id}>
+                    <td className="font-semibold text-slate-900 min-w-[170px]">
+                      <OverflowTooltip
+                        text={license.systemName || "-"}
+                        className="max-w-[160px]"
+                      />
+                    </td>
+                    <td className="min-w-[140px]">
+                      <OverflowTooltip
+                        text={license.version || "-"}
+                        className="max-w-[130px]"
+                      />
+                    </td>
+                    <td className="min-w-[170px]">
+                      <OverflowTooltip
+                        text={license.customer?.fullName || "-"}
+                        className="max-w-[160px]"
+                      />
+                    </td>
+                    <td className="font-mono whitespace-nowrap" dir="ltr">
+                      <OverflowTooltip
+                        text={license.code1 || "-"}
+                        className="max-w-[130px]"
+                        dir="ltr"
+                      />
+                    </td>
+                    <td className="font-mono whitespace-nowrap" dir="ltr">
+                      <OverflowTooltip
+                        text={license.licenseId || "-"}
+                        className="max-w-[130px]"
+                        dir="ltr"
+                      />
                     </td>
                   </tr>
-                ) : filteredLicenses.length === 0 ? (
-                  <tr>
-                    <td colSpan="7" className="py-8 text-center text-slate-500">
-                      نتیجه ای یافت نشد.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredLicenses.map((license) => (
-                    <tr key={license.id}>
-                      <td className="font-semibold text-slate-900 min-w-[170px]">
-                        <OverflowTooltip
-                          text={license.systemName || "-"}
-                          className="max-w-[160px]"
-                        />
-                      </td>
-                      <td className="min-w-[140px]">
-                        <OverflowTooltip
-                          text={license.version || "-"}
-                          className="max-w-[130px]"
-                        />
-                      </td>
-                      <td className="min-w-[170px]">
-                        <OverflowTooltip
-                          text={license.customer?.fullName || "-"}
-                          className="max-w-[160px]"
-                        />
-                      </td>
-                      <td className="font-mono whitespace-nowrap" dir="ltr">
-                        <OverflowTooltip
-                          text={license.code1 || "-"}
-                          className="max-w-[130px]"
-                          dir="ltr"
-                        />
-                      </td>
-                      <td className="whitespace-nowrap">
-                        {license.expireDate
-                          ? new Date(license.expireDate).toLocaleDateString(
-                              "fa-IR",
-                            )
-                          : "-"}
-                      </td>
-                      <td className="whitespace-nowrap">
-                        {canManageAll ? (
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => editLicense(license)}
-                              className="panel-btn-secondary py-1.5 px-3"
-                            >
-                              <Edit2 size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => deleteLicense(license.id)}
-                              className="panel-btn-danger py-1.5 px-3"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-slate-400">فقط ادمین/کاربر</span>
-                        )}
-                      </td>
-                      <td className="font-mono whitespace-nowrap" dir="ltr">
-                        <OverflowTooltip
-                          text={license.licenseId || "-"}
-                          className="max-w-[130px]"
-                          dir="ltr"
-                        />
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

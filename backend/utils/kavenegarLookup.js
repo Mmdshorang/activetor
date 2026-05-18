@@ -23,7 +23,7 @@ const sendKavenegarLookup = async ({ receptor, template, token, token2, token3, 
   });
   if (token2) query.set("token2", token2);
   if (token3) query.set("token3", token3);
-
+  console.log("Sending Kavenegar lookup with query:", query.toString());
   const endpoint = `https://api.kavenegar.com/v1/${apiKey}/verify/lookup.json?${query.toString()}`;
   const response = await fetch(endpoint, { method: "GET" });
 

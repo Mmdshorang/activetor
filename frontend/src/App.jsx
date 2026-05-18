@@ -8,6 +8,7 @@ import Messages from "./pages/Messages";
 import Licenses from "./pages/Licenses"; // ایمپورت کامپوننت لایسنس
 import Contracts from "./pages/Contracts";
 import RenewalRequests from "./pages/RenewalRequests";
+import Trash from "./pages/Trash";
 import DashboardLayout from "./layout/DashboardLayout";
 import { canAccessPage, getAuthUser } from "./utils/auth";
 import { PAGE_DEFINITIONS } from "./constants/pagePermissions";
@@ -63,6 +64,7 @@ export default function App() {
           <Route path="licenses" element={<RoleRoute allowedRoles={["admin", "user", "customer"]} pageKey="licenses"><Licenses /></RoleRoute>} />
           <Route path="contracts" element={<RoleRoute allowedRoles={["admin", "user", "agent", "customer"]} pageKey="contracts"><Contracts /></RoleRoute>} />
           <Route path="renewal-requests" element={<RoleRoute allowedRoles={["admin", "user", "agent", "customer"]} pageKey="renewalRequests"><RenewalRequests /></RoleRoute>} />
+          <Route path="trash" element={<RoleRoute allowedRoles={["admin"]}><Trash /></RoleRoute>} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

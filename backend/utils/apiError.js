@@ -61,10 +61,19 @@ const parseApiError = (error, fallbackMessage) => {
     return "خطا در پردازش اطلاعات ارسالی";
   }
 
+  // For non-DB/runtime errors (e.g. SMS provider), returning the raw message
+  // helps debugging in development without leaking details in production.
+  const nodeEnv = String(process.env.NODE_ENV || "").trim().toLowerCase() || "development";
+  const isProduction = nodeEnv === "production";
+
+  if (!isProduction && error?.message) {
+    const message = String(error.message).trim();
+    if (message) return message;
+  }
+
   return fallbackMessage || "خطای داخلی سرور";
 };
 
 module.exports = {
   parseApiError,
 };
-

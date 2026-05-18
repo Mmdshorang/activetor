@@ -13,6 +13,7 @@ import {
   FileText,
   ChevronLeft,
   Repeat,
+  Trash2,
 } from "lucide-react";
 import { canAccessPage, clearAuth, getAuthUser } from "../utils/auth";
 
@@ -25,6 +26,7 @@ const adminMenuItems = [
   { key: "contracts", path: "/contracts", label: "قراردادها", icon: FileText },
   { key: "messages", path: "/messages", label: "پیام ها", icon: MessageSquare },
   { key: "renewalRequests", path: "/renewal-requests", label: "درخواست تمدید", icon: Repeat },
+  { key: "trash", path: "/trash", label: "سطل زباله", icon: Trash2 },
 ];
 
 const customerMenuItems = [

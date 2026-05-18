@@ -2,29 +2,13 @@ const { Op } = require("sequelize");
 const { sendKavenegarLookup } = require("../utils/kavenegarLookup");
 const { normalizeIranPhone } = require("../utils/phone");
 const { getSetting, setSetting } = require("../utils/settings");
+const { parseDateOnly, todayUtcYmd, addDaysUtcYmd } = require("../utils/dateOnly");
 
 const SETTING_KEY = "sms.contract_expiry_reminder";
 const SMS_TYPE = "contract_expire_soon";
 
-const startOfDay = (date) => {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d;
-};
-
-const endOfDay = (date) => {
-  const d = new Date(date);
-  d.setHours(23, 59, 59, 999);
-  return d;
-};
-
-const addDays = (date, days) => new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
-
 const toIsoDate = (value) => {
-  if (!value) return null;
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toISOString().slice(0, 10);
+  return parseDateOnly(value);
 };
 
 const buildDefaultSettingFromEnv = () => {
@@ -54,15 +38,13 @@ const runContractExpirySmsJob = async (db) => {
     return { ok: false, skipped: true, reason: "missing_template" };
   }
 
-  const today = startOfDay(new Date());
-  const targetDay = addDays(today, daysBeforeEnd);
-  const from = startOfDay(targetDay);
-  const to = endOfDay(targetDay);
+  const today = todayUtcYmd();
+  const targetDay = addDaysUtcYmd(today, daysBeforeEnd);
 
   const contracts = await db.Contract.findAll({
     where: {
       status: "active",
-      endDate: { [Op.between]: [from, to] },
+      endDate: targetDay,
     },
     include: [{ model: db.Customer, as: "customer", attributes: ["id", "fullName", "phone", "username", "isActive"] }],
     order: [["endDate", "ASC"]],
@@ -152,8 +134,7 @@ const runContractExpirySmsJob = async (db) => {
     ok: true,
     skipped: false,
     daysBeforeEnd,
-    from,
-    to,
+    targetDay,
     totals: { found: contracts.length, sent, failed, skippedNoPhone, skippedInactive, skippedDuplicate },
   };
 };
@@ -164,4 +145,3 @@ module.exports = {
   runContractExpirySmsJob,
   buildDefaultSettingFromEnv,
 };
-

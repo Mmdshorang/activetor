@@ -16,7 +16,7 @@ module.exports = (sequelize, DataTypes) => {
     },
     code2: DataTypes.STRING,
     code3: DataTypes.STRING,
-    expireDate: DataTypes.DATE,
+    expireDate: DataTypes.DATEONLY,
     licenseId: DataTypes.STRING, // 👈 اضافه کردن فیلد licenseId
     isActive: {
       type: DataTypes.BOOLEAN,

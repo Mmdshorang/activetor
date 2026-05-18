@@ -7,7 +7,7 @@ module.exports = (sequelize, DataTypes) => {
       company: DataTypes.STRING,
       address: DataTypes.STRING,
       supportStatus: DataTypes.STRING,
-      expireDate: DataTypes.DATE,
+      expireDate: DataTypes.DATEONLY,
       username: {
         type: DataTypes.STRING,
         unique: true,
@@ -18,8 +18,8 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: 1,
       },
-      contractStartDate: DataTypes.DATE,
-      contractEndDate: DataTypes.DATE,
+      contractStartDate: DataTypes.DATEONLY,
+      contractEndDate: DataTypes.DATEONLY,
       isActive: {
         type: DataTypes.BOOLEAN,
         defaultValue: true,

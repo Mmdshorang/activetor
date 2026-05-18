@@ -3,25 +3,14 @@ const router = require("express").Router();
 const db = require("../models");
 const { auth } = require("../middleware/authorize");
 const { Op, fn, col, literal } = require("sequelize");
+const { daysBetweenUtc, todayUtcYmd, addDaysUtcYmd } = require("../utils/dateOnly");
 
 router.use(auth);
 
 const calcDaysRemaining = (endDate) => {
   if (!endDate) return null;
-  const end = new Date(endDate);
-  const now = new Date();
-  end.setHours(0, 0, 0, 0);
-  now.setHours(0, 0, 0, 0);
-  return Math.ceil((end - now) / (1000 * 60 * 60 * 24));
+  return daysBetweenUtc(todayUtcYmd(), String(endDate).slice(0, 10));
 };
-
-const startOfToday = () => {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-};
-
-const addDays = (date, days) => new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
 
 const contractListIncludes = [
   { model: db.Customer, as: "customer", attributes: ["id", "fullName", "username", "company", "isActive"] },
@@ -36,10 +25,10 @@ const enrichContract = (contract) => {
 router.get("/dashboard-lists", async (req, res) => {
   try {
     const role = req.user?.role;
-    const today = startOfToday();
     const days = Number(req.query?.days ?? 30);
     const soonDays = Number.isFinite(days) && days > 0 ? Math.min(days, 365) : 30;
-    const soonUntil = addDays(today, soonDays);
+    const today = todayUtcYmd();
+    const soonUntil = addDaysUtcYmd(today, soonDays);
 
     // ----- Active systems (based on active licenses) -----
     // We return grouped list per systemName to use as a "systems" list in dashboard.
@@ -68,7 +57,8 @@ router.get("/dashboard-lists", async (req, res) => {
         [fn("MAX", col("License.expireDate")), "latestExpireDate"],
       ],
       group: ["systemName"],
-      order: [[literal("activeLicenses"), "DESC"]],
+      // Postgres lower-cases unquoted identifiers, so order by quoted alias.
+      order: [[literal('"activeLicenses"'), "DESC"]],
       limit: 50,
     });
 

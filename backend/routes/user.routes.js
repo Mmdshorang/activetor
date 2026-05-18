@@ -2,6 +2,7 @@
 const router = require("express").Router();
 const db = require("../models");
 const bcrypt = require("bcryptjs");
+const { Op } = require("sequelize");
 const { auth, allowRoles } = require("../middleware/authorize");
 const { parseApiError } = require("../utils/apiError");
 const { ALL_PAGE_KEYS, normalizePagePermissions } = require("../utils/pagePermissions");
@@ -32,6 +33,68 @@ router.get("/", async (req, res) => {
     res.json(normalizedUsers);
   } catch (error) {
     res.status(500).json({ message: parseApiError(error, "خطا در دریافت لیست کاربران") });
+  }
+});
+
+// دریافت لیست کاربران حذف شده (Soft Delete) - فقط ادمین
+router.get("/deleted", async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ message: "فقط ادمین مجاز است" });
+    }
+
+    const users = await db.User.findAll({
+      paranoid: false,
+      where: { deletedAt: { [Op.ne]: null } },
+      attributes: { exclude: ["password"] },
+      order: [["deletedAt", "DESC"]],
+    });
+
+    const normalizedUsers = users.map((user) => {
+      const item = user.toJSON ? user.toJSON() : user;
+      return {
+        ...item,
+        pagePermissions: normalizePagePermissions(item.pagePermissions, item.role),
+      };
+    });
+
+    return res.json(normalizedUsers);
+  } catch (error) {
+    return res.status(500).json({ message: parseApiError(error, "خطا در دریافت کاربران حذف شده") });
+  }
+});
+
+// بازگردانی کاربر حذف شده - فقط ادمین
+router.patch("/:id/restore", async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ message: "فقط ادمین مجاز است" });
+    }
+
+    const targetId = Number(req.params.id);
+    if (!Number.isInteger(targetId) || targetId <= 0) {
+      return res.status(400).json({ message: "شناسه کاربر نامعتبر است" });
+    }
+
+    const user = await db.User.findByPk(targetId, { paranoid: false });
+    if (!user) {
+      return res.status(404).json({ message: "کاربر یافت نشد" });
+    }
+    if (!user.deletedAt) {
+      return res.status(400).json({ message: "این کاربر حذف نشده است" });
+    }
+
+    await user.restore();
+    await user.update({ isActive: true });
+
+    const { password: _, ...updatedUser } = user.toJSON();
+    return res.json({
+      ...updatedUser,
+      pagePermissions: normalizePagePermissions(updatedUser.pagePermissions, updatedUser.role),
+      allowedPageKeys: ALL_PAGE_KEYS,
+    });
+  } catch (err) {
+    return res.status(500).json({ message: parseApiError(err, "خطا در بازگردانی کاربر") });
   }
 });
 
@@ -167,6 +230,35 @@ router.patch("/:id/activation", async (req, res) => {
     });
   } catch (err) {
     return res.status(500).json({ message: parseApiError(err, "خطا در تغییر وضعیت کاربر") });
+  }
+});
+
+router.delete("/:id", async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ message: "فقط ادمین مجاز است" });
+    }
+
+    const targetId = Number(req.params.id);
+    if (!Number.isInteger(targetId) || targetId <= 0) {
+      return res.status(400).json({ message: "شناسه کاربر نامعتبر است" });
+    }
+
+    if (req.user.id === targetId) {
+      return res.status(400).json({ message: "امکان حذف حساب فعلی وجود ندارد" });
+    }
+
+    const user = await db.User.findByPk(targetId);
+    if (!user) {
+      return res.status(404).json({ message: "کاربر یافت نشد" });
+    }
+
+    await user.update({ isActive: false });
+    await user.destroy();
+
+    return res.json({ message: "کاربر با موفقیت حذف شد" });
+  } catch (err) {
+    return res.status(500).json({ message: parseApiError(err, "خطا در حذف کاربر") });
   }
 });
 

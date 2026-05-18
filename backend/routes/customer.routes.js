@@ -5,6 +5,7 @@ const { Op } = require("sequelize");
 const { auth, allowRoles } = require("../middleware/authorize");
 const { parseApiError } = require("../utils/apiError");
 const { normalizeIranPhone } = require("../utils/phone");
+const { parseDateOnly, daysBetweenUtc, todayUtcYmd } = require("../utils/dateOnly");
 
 router.use(auth);
 router.use(allowRoles("admin", "user", "agent"));
@@ -18,10 +19,7 @@ const sanitizeCustomer = (customer) => {
 };
 
 const parseDateOrNull = (value) => {
-  if (!value) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed;
+  return parseDateOnly(value);
 };
 
 const parseBooleanValue = (value) => {
@@ -33,11 +31,7 @@ const parseBooleanValue = (value) => {
 
 const calcDaysRemaining = (endDate) => {
   if (!endDate) return null;
-  const end = new Date(endDate);
-  const now = new Date();
-  end.setHours(0, 0, 0, 0);
-  now.setHours(0, 0, 0, 0);
-  return Math.ceil((end - now) / (1000 * 60 * 60 * 24));
+  return daysBetweenUtc(todayUtcYmd(), String(endDate).slice(0, 10));
 };
 
 const ensureUniqueMobile = async (phone, excludeCustomerId = null) => {
@@ -239,6 +233,52 @@ router.get("/", async (req, res) => {
     return res
       .status(500)
       .json({ message: parseApiError(error, "خطا در دریافت لیست مشتریان") });
+  }
+});
+
+// دریافت لیست مشتریان حذف شده (Soft Delete) - فقط ادمین
+router.get("/deleted", async (req, res) => {
+  try {
+    if (!isAdmin(req)) {
+      return res.status(403).json({ message: "فقط ادمین مجاز است" });
+    }
+
+    const customers = await db.Customer.findAll({
+      paranoid: false,
+      where: { deletedAt: { [Op.ne]: null } },
+      order: [["deletedAt", "DESC"]],
+    });
+
+    return res.json(customers.map(sanitizeCustomer));
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ message: parseApiError(error, "خطا در دریافت مشتریان حذف شده") });
+  }
+});
+
+// بازگردانی مشتری حذف شده - فقط ادمین
+router.patch("/:id/restore", async (req, res) => {
+  try {
+    if (!isAdmin(req)) {
+      return res.status(403).json({ message: "فقط ادمین مجاز است" });
+    }
+
+    const customer = await db.Customer.findByPk(req.params.id, { paranoid: false });
+    if (!customer) {
+      return res.status(404).json({ message: "مشتری یافت نشد" });
+    }
+    if (!customer.deletedAt) {
+      return res.status(400).json({ message: "این مشتری حذف نشده است" });
+    }
+
+    await customer.restore();
+    await customer.update({ isActive: true });
+    return res.json(sanitizeCustomer(customer));
+  } catch (err) {
+    return res
+      .status(500)
+      .json({ message: parseApiError(err, "خطا در بازگردانی مشتری") });
   }
 });
 

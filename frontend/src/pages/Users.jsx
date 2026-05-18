@@ -1,5 +1,20 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Users, UserPlus, Edit2, Save, X, Loader2, AlertCircle, Search, Phone, UserCircle2, Shield } from "lucide-react";
+import {
+  Users,
+  UserPlus,
+  Edit2,
+  Save,
+  X,
+  Loader2,
+  AlertCircle,
+  Search,
+  Phone,
+  UserCircle2,
+  Shield,
+  ToggleLeft,
+  ToggleRight,
+  Trash2,
+} from "lucide-react";
 import api from "../services/api";
 import { PAGE_DEFINITIONS, ROLE_DEFAULT_PAGE_PERMISSIONS } from "../constants/pagePermissions";
 import { getAuthUser } from "../utils/auth";
@@ -8,6 +23,9 @@ export default function UsersM() {
   const authUser = getAuthUser();
   const isAdmin = authUser?.role === "admin";
   const [users, setUsers] = useState([]);
+  const [statusFilter, setStatusFilter] = useState(isAdmin ? "all" : "active");
+  const [activationLoadingId, setActivationLoadingId] = useState(null);
+  const [deleteLoadingId, setDeleteLoadingId] = useState(null);
   const [form, setForm] = useState({
     fullName: "",
     username: "",
@@ -117,6 +135,23 @@ export default function UsersM() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const deleteUser = async (user) => {
+    if (!isAdmin) return;
+    if (!window.confirm("آیا از حذف این کاربر مطمئن هستید؟")) return;
+    try {
+      setDeleteLoadingId(user.id);
+      setError("");
+      await api.delete(`/users/${user.id}`);
+      setUsers((prev) => prev.filter((item) => item.id !== user.id));
+      if (editId === user.id) cancelEdit();
+      setSuccess("کاربر حذف شد.");
+    } catch (err) {
+      setError(err.response?.data?.message || "خطا در حذف کاربر.");
+    } finally {
+      setDeleteLoadingId(null);
+    }
+  };
+
   const cancelEdit = () => {
     setForm({
       fullName: "",
@@ -130,16 +165,40 @@ export default function UsersM() {
     setError("");
   };
 
+  const toggleActivation = async (user) => {
+    if (!isAdmin) return;
+    try {
+      setActivationLoadingId(user.id);
+      setError("");
+      const res = await api.patch(`/users/${user.id}/activation`, {
+        isActive: !(user.isActive !== false),
+      });
+      setUsers((prev) => prev.map((item) => (item.id === user.id ? res.data : item)));
+    } catch (err) {
+      setError(err.response?.data?.message || "خطا در تغییر وضعیت کاربر.");
+    } finally {
+      setActivationLoadingId(null);
+    }
+  };
+
   const filteredUsers = useMemo(() => {
+    const statusFiltered = users.filter((item) => {
+      const isActive = item.isActive !== false;
+      if (!isAdmin) return isActive;
+      if (statusFilter === "active") return isActive;
+      if (statusFilter === "inactive") return !isActive;
+      return true;
+    });
+
     const term = searchTerm.trim().toLowerCase();
-    if (!term) return users;
-    return users.filter((item) => {
+    if (!term) return statusFiltered;
+    return statusFiltered.filter((item) => {
       const fullName = item.fullName?.toLowerCase() || "";
       const username = item.username?.toLowerCase() || "";
       const phone = item.phone?.toLowerCase() || "";
       return fullName.includes(term) || username.includes(term) || phone.includes(term);
     });
-  }, [users, searchTerm]);
+  }, [users, searchTerm, statusFilter, isAdmin]);
 
   return (
     <div className="space-y-6" dir="rtl">
@@ -267,15 +326,31 @@ export default function UsersM() {
 
         <div className="xl:col-span-2 panel-card overflow-hidden">
           <div className="p-4 border-b border-slate-100">
-            <div className="relative w-full md:w-80">
-              <Search className="absolute right-3 top-3 text-slate-400" size={16} />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="جستجو براساس نام، نام کاربری یا تلفن"
-                className="panel-input pr-9"
-              />
+            <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+              <div className="relative w-full md:w-80">
+                <Search className="absolute right-3 top-3 text-slate-400" size={16} />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="جستجو براساس نام، نام کاربری یا تلفن"
+                  className="panel-input pr-9"
+                />
+              </div>
+
+              {isAdmin && (
+                <div className="w-full md:w-52">
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="panel-select"
+                  >
+                    <option value="all">همه کاربران</option>
+                    <option value="active">فقط فعال</option>
+                    <option value="inactive">فقط غیرفعال</option>
+                  </select>
+                </div>
+              )}
             </div>
           </div>
 
@@ -287,13 +362,14 @@ export default function UsersM() {
                   <th>نام کاربری</th>
                   <th>نقش</th>
                   <th>تلفن</th>
+                  <th>وضعیت</th>
                   <th>عملیات</th>
                 </tr>
               </thead>
               <tbody>
                 {loading && users.length === 0 ? (
                   <tr>
-                    <td colSpan="5" className="text-center py-8 text-slate-500">
+                    <td colSpan="6" className="text-center py-8 text-slate-500">
                       <span className="inline-flex items-center gap-2">
                         <Loader2 className="animate-spin text-teal-700" size={16} />
                         در حال بارگذاری...
@@ -302,7 +378,7 @@ export default function UsersM() {
                   </tr>
                 ) : filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan="5" className="text-center py-8 text-slate-500">
+                    <td colSpan="6" className="text-center py-8 text-slate-500">
                       نتیجه ای یافت نشد.
                     </td>
                   </tr>
@@ -319,11 +395,61 @@ export default function UsersM() {
                       <td className="text-slate-700" dir="ltr">
                         {user.phone || "-"}
                       </td>
+                      <td className="whitespace-nowrap">
+                        {isAdmin ? (
+                          <button
+                            type="button"
+                            onClick={() => toggleActivation(user)}
+                            disabled={activationLoadingId === user.id}
+                            className={`inline-flex items-center gap-1.5 whitespace-nowrap text-sm font-medium ${
+                              user.isActive !== false ? "text-green-600" : "text-red-600"
+                            }`}
+                          >
+                            {activationLoadingId === user.id ? (
+                              <Loader2 size={16} className="animate-spin" />
+                            ) : user.isActive !== false ? (
+                              <>
+                                <ToggleRight size={18} /> فعال
+                              </>
+                            ) : (
+                              <>
+                                <ToggleLeft size={18} /> غیرفعال
+                              </>
+                            )}
+                          </button>
+                        ) : (
+                          <span
+                            className={`inline-flex items-center gap-1.5 whitespace-nowrap text-sm font-medium ${
+                              user.isActive !== false ? "text-green-600" : "text-red-600"
+                            }`}
+                          >
+                            {user.isActive !== false ? "فعال" : "غیرفعال"}
+                          </span>
+                        )}
+                      </td>
                       <td>
-                        <button onClick={() => startEdit(user)} className="panel-btn-secondary py-1.5 px-3">
-                          <Edit2 size={14} />
-                          ویرایش
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => startEdit(user)} className="panel-btn-secondary py-1.5 px-3">
+                            <Edit2 size={14} />
+                            ویرایش
+                          </button>
+
+                          {isAdmin && (
+                            <button
+                              onClick={() => deleteUser(user)}
+                              disabled={deleteLoadingId === user.id}
+                              className="panel-btn-danger py-1.5 px-3"
+                              title="حذف (Soft Delete)"
+                            >
+                              {deleteLoadingId === user.id ? (
+                                <Loader2 className="animate-spin" size={14} />
+                              ) : (
+                                <Trash2 size={14} />
+                              )}
+                              حذف
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))

@@ -2,6 +2,7 @@ const router = require("express").Router();
 const db = require("../models");
 const { Op } = require("sequelize");
 const { auth } = require("../middleware/authorize");
+const { parseDateOnly } = require("../utils/dateOnly");
 
 router.use(auth);
 
@@ -9,10 +10,7 @@ const canManageAll = (req) => req.user.role === "admin" || req.user.role === "us
 const isCustomer = (req) => req.user.role === "customer";
 
 const parseDateOrNull = (value) => {
-  if (!value) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed;
+  return parseDateOnly(value);
 };
 
 const resolveCustomerId = (payload = {}, query = {}) => {

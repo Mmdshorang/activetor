@@ -36,6 +36,28 @@ const toJalaliDate = (dateValue) => {
 const formatAmount = (value) =>
   `${Number(value || 0).toLocaleString("fa-IR")} تومان`;
 
+const toEnglishDigits = (value) =>
+  String(value ?? "")
+    .replace(/[۰-۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d))
+    .replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
+
+const toPersianDigits = (value) =>
+  String(value ?? "").replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]);
+
+const normalizeAmountInput = (value) => {
+  const english = toEnglishDigits(value);
+  const digitsOnly = english.replace(/[^\d]/g, "");
+  if (!digitsOnly) return "";
+  return digitsOnly.replace(/^0+(?=\d)/, "");
+};
+
+const formatAmountInput = (digits) => {
+  const normalized = normalizeAmountInput(digits);
+  if (!normalized) return "";
+  const grouped = normalized.replace(/\B(?=(\d{3})+(?!\d))/g, "٬");
+  return toPersianDigits(grouped);
+};
+
 export default function Contracts() {
   const [searchParams] = useSearchParams();
   const [authUser, setAuthUser] = useState(null);
@@ -125,7 +147,10 @@ export default function Contracts() {
     setForm({
       title: item.title || "",
       customerId: String(item.customerId || ""),
-      amount: item.amount || "",
+      amount:
+        item.amount === null || item.amount === undefined
+          ? ""
+          : normalizeAmountInput(String(item.amount)),
       startDate: toJalaliDate(item.startDate),
       endDate: toJalaliDate(item.endDate),
       status: item.status || "active",
@@ -314,9 +339,17 @@ export default function Contracts() {
                 )}
 
                 <input
-                  type="number"
-                  value={form.amount}
-                  onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  dir="ltr"
+                  value={formatAmountInput(form.amount)}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      amount: normalizeAmountInput(e.target.value),
+                    })
+                  }
                   placeholder="مبلغ قرارداد (تومان)"
                   className="panel-input"
                 />

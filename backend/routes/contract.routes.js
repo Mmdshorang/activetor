@@ -1,21 +1,14 @@
-const router = require("express").Router();
+﻿const router = require("express").Router();
 const db = require("../models");
 const { auth, allowRoles } = require("../middleware/authorize");
+const { parseDateOnly, daysBetweenUtc, todayUtcYmd } = require("../utils/dateOnly");
 
 router.use(auth);
 
-const parseDate = (value) => {
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
 const calcDaysRemaining = (endDate) => {
   if (!endDate) return null;
-  const end = new Date(endDate);
-  const now = new Date();
-  end.setHours(0, 0, 0, 0);
-  now.setHours(0, 0, 0, 0);
-  return Math.ceil((end - now) / (1000 * 60 * 60 * 24));
+  // endDate is DATEONLY ("YYYY-MM-DD") - compute in UTC to avoid timezone shifts.
+  return daysBetweenUtc(todayUtcYmd(), String(endDate).slice(0, 10));
 };
 
 const enrichContract = (contract) => {
@@ -52,7 +45,7 @@ router.get("/", async (req, res) => {
 
     return res.json(contracts.map(enrichContract));
   } catch (error) {
-    return res.status(500).json({ message: "خطا در دریافت قراردادها" });
+    return res.status(500).json({ message: "Ø®Ø·Ø§ Ø¯Ø± Ø¯Ø±ÛŒØ§ÙØª Ù‚Ø±Ø§Ø±Ø¯Ø§Ø¯Ù‡Ø§" });
   }
 });
 
@@ -64,7 +57,7 @@ router.get("/customers/options", allowRoles("admin", "user"), async (req, res) =
     });
     return res.json(customers);
   } catch (error) {
-    return res.status(500).json({ message: "خطا در دریافت مشتریان" });
+    return res.status(500).json({ message: "Ø®Ø·Ø§ Ø¯Ø± Ø¯Ø±ÛŒØ§ÙØª Ù…Ø´ØªØ±ÛŒØ§Ù†" });
   }
 });
 
@@ -73,21 +66,21 @@ router.post("/", allowRoles("admin", "user"), async (req, res) => {
     const { title, amount, startDate, endDate, description, status, customerId } = req.body;
 
     if (!title || !amount || !startDate || !endDate || !customerId) {
-      return res.status(400).json({ message: "عنوان، مبلغ، تاریخ شروع، تاریخ پایان و مشتری الزامی است" });
+      return res.status(400).json({ message: "Ø¹Ù†ÙˆØ§Ù†ØŒ Ù…Ø¨Ù„ØºØŒ ØªØ§Ø±ÛŒØ® Ø´Ø±ÙˆØ¹ØŒ ØªØ§Ø±ÛŒØ® Ù¾Ø§ÛŒØ§Ù† Ùˆ Ù…Ø´ØªØ±ÛŒ Ø§Ù„Ø²Ø§Ù…ÛŒ Ø§Ø³Øª" });
     }
 
-    const parsedStart = parseDate(startDate);
-    const parsedEnd = parseDate(endDate);
+    const parsedStart = parseDateOnly(startDate);
+    const parsedEnd = parseDateOnly(endDate);
     if (!parsedStart || !parsedEnd) {
-      return res.status(400).json({ message: "فرمت تاریخ نامعتبر است" });
+      return res.status(400).json({ message: "ÙØ±Ù…Øª ØªØ§Ø±ÛŒØ® Ù†Ø§Ù…Ø¹ØªØ¨Ø± Ø§Ø³Øª" });
     }
     if (parsedEnd < parsedStart) {
-      return res.status(400).json({ message: "تاریخ پایان باید بعد از تاریخ شروع باشد" });
+      return res.status(400).json({ message: "ØªØ§Ø±ÛŒØ® Ù¾Ø§ÛŒØ§Ù† Ø¨Ø§ÛŒØ¯ Ø¨Ø¹Ø¯ Ø§Ø² ØªØ§Ø±ÛŒØ® Ø´Ø±ÙˆØ¹ Ø¨Ø§Ø´Ø¯" });
     }
 
     const customer = await db.Customer.findByPk(Number(customerId));
     if (!customer) {
-      return res.status(404).json({ message: "مشتری یافت نشد" });
+      return res.status(404).json({ message: "Ù…Ø´ØªØ±ÛŒ ÛŒØ§ÙØª Ù†Ø´Ø¯" });
     }
 
     const contract = await db.Contract.create({
@@ -116,7 +109,7 @@ router.post("/", allowRoles("admin", "user"), async (req, res) => {
 
     return res.status(201).json(enrichContract(created));
   } catch (error) {
-    return res.status(500).json({ message: "خطا در ایجاد قرارداد" });
+    return res.status(500).json({ message: "Ø®Ø·Ø§ Ø¯Ø± Ø§ÛŒØ¬Ø§Ø¯ Ù‚Ø±Ø§Ø±Ø¯Ø§Ø¯" });
   }
 });
 
@@ -124,19 +117,19 @@ router.put("/:id", allowRoles("admin", "user"), async (req, res) => {
   try {
     const contract = await db.Contract.findByPk(req.params.id);
     if (!contract) {
-      return res.status(404).json({ message: "قرارداد یافت نشد" });
+      return res.status(404).json({ message: "Ù‚Ø±Ø§Ø±Ø¯Ø§Ø¯ ÛŒØ§ÙØª Ù†Ø´Ø¯" });
     }
 
     const updatePayload = { ...req.body };
 
     if (updatePayload.startDate) {
-      const parsed = parseDate(updatePayload.startDate);
-      if (!parsed) return res.status(400).json({ message: "تاریخ شروع نامعتبر است" });
+      const parsed = parseDateOnly(updatePayload.startDate);
+      if (!parsed) return res.status(400).json({ message: "ØªØ§Ø±ÛŒØ® Ø´Ø±ÙˆØ¹ Ù†Ø§Ù…Ø¹ØªØ¨Ø± Ø§Ø³Øª" });
       updatePayload.startDate = parsed;
     }
     if (updatePayload.endDate) {
-      const parsed = parseDate(updatePayload.endDate);
-      if (!parsed) return res.status(400).json({ message: "تاریخ پایان نامعتبر است" });
+      const parsed = parseDateOnly(updatePayload.endDate);
+      if (!parsed) return res.status(400).json({ message: "ØªØ§Ø±ÛŒØ® Ù¾Ø§ÛŒØ§Ù† Ù†Ø§Ù…Ø¹ØªØ¨Ø± Ø§Ø³Øª" });
       updatePayload.endDate = parsed;
     }
     if (updatePayload.amount !== undefined) {
@@ -145,7 +138,7 @@ router.put("/:id", allowRoles("admin", "user"), async (req, res) => {
 
     if (updatePayload.customerId) {
       const customer = await db.Customer.findByPk(Number(updatePayload.customerId));
-      if (!customer) return res.status(404).json({ message: "مشتری یافت نشد" });
+      if (!customer) return res.status(404).json({ message: "Ù…Ø´ØªØ±ÛŒ ÛŒØ§ÙØª Ù†Ø´Ø¯" });
       updatePayload.customerId = customer.id;
     }
 
@@ -177,7 +170,7 @@ router.put("/:id", allowRoles("admin", "user"), async (req, res) => {
 
     return res.json(enrichContract(updated));
   } catch (error) {
-    return res.status(500).json({ message: "خطا در ویرایش قرارداد" });
+    return res.status(500).json({ message: "Ø®Ø·Ø§ Ø¯Ø± ÙˆÛŒØ±Ø§ÛŒØ´ Ù‚Ø±Ø§Ø±Ø¯Ø§Ø¯" });
   }
 });
 
@@ -185,7 +178,7 @@ router.delete("/:id", allowRoles("admin", "user"), async (req, res) => {
   try {
     const contract = await db.Contract.findByPk(req.params.id);
     if (!contract) {
-      return res.status(404).json({ message: "قرارداد یافت نشد" });
+      return res.status(404).json({ message: "Ù‚Ø±Ø§Ø±Ø¯Ø§Ø¯ ÛŒØ§ÙØª Ù†Ø´Ø¯" });
     }
 
     const customerId = contract.customerId;
@@ -205,12 +198,11 @@ router.delete("/:id", allowRoles("admin", "user"), async (req, res) => {
       });
     }
 
-    return res.json({ message: "قرارداد حذف شد" });
+    return res.json({ message: "Ù‚Ø±Ø§Ø±Ø¯Ø§Ø¯ Ø­Ø°Ù Ø´Ø¯" });
   } catch (error) {
-    return res.status(500).json({ message: "خطا در حذف قرارداد" });
+    return res.status(500).json({ message: "Ø®Ø·Ø§ Ø¯Ø± Ø­Ø°Ù Ù‚Ø±Ø§Ø±Ø¯Ø§Ø¯" });
   }
 });
 
 module.exports = router;
-
 
