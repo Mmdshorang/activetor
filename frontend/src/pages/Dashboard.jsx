@@ -377,7 +377,7 @@ export default function Dashboard() {
               </div>
 
               <div className="panel-card p-4">
-                <p className="text-sm text-slate-500 mb-2">نام Template کاوه‌نگار</p>
+                <p className="text-sm text-slate-500 mb-2"></p>
                 <div className="flex items-center gap-2">
                   <input
                     className="panel-input flex-1"

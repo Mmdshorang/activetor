@@ -213,10 +213,8 @@ export default function Licenses() {
       if (!activecodeUrl) {
         throw new Error("آدرس سرور لایسنس تنظیم نشده است");
       }
-
-      const res = await axios.post(activecodeUrl, externalFormData, {
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      });
+    console.log(activecodeUrl)
+      const res = await axios.post(activecodeUrl, externalFormData);
 
       if (!res.data || !res.data.Message) {
         throw new Error("پاسخ نامعتبر از سرور لایسنس");

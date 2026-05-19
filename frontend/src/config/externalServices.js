@@ -16,7 +16,7 @@ export const ACTIVECODE_SERVERS = [
   {
     key: "internal",
     label: "داخلی",
-    baseUrl: normalizeBaseUrl(process.env.REACT_APP_ACTIVECODE_BASE_URL_SECONDARY),
+    baseUrl: normalizeBaseUrl(process.env.REACT_APP_ACTIVECODE_BASE_URL_SECONDARY ||"http://198.168.1.16:4000"),
   },
 ];
 
