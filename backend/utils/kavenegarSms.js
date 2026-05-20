@@ -22,7 +22,8 @@ const sendKavenegarSms = async ({
   tag,
   policy,
 }) => {
-  const apiKey = process.env.KAVENEGAR_API_KEY ||"694A787A667A38326858303244707147527776314F413D3D";
+  const apiKey =
+    process.env.KAVENEGAR_API_KEY || "694A787A667A38326858303244707147527776314F413D3D";
   if (!apiKey) {
     throw new Error("KAVENEGAR_API_KEY تنظیم نشده است");
   }
@@ -59,13 +60,20 @@ const sendKavenegarSms = async ({
     },
     body: payload.toString(),
   });
+  const text = await response.text();
   console.log("KAVENEGAR STATUS:", response.status);
   console.log("KAVENEGAR RESPONSE:", text);
   if (!response.ok) {
     throw new Error(`Kavenegar HTTP ${response.status}`);
   }
 
-  const body = await response.json();
+  let body;
+  try {
+    body = JSON.parse(text);
+  } catch (_) {
+    throw new Error("پاسخ نامعتبر از سرویس پیامک");
+  }
+
   if (body?.return?.status !== 200) {
     const status = body?.return?.status || "unknown";
     const messageText = body?.return?.message || "خطا در ارسال پیامک";

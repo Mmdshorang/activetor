@@ -134,9 +134,9 @@ export default function Login() {
       const msg = extractErrorMessage(err, "خطا در ارسال کد تایید.");
       setError(msg);
 
-      // If backend says "wait N seconds", reflect it in UI and show OTP step.
+      // If backend rate-limits resend, keep user on OTP step for existing code.
       const waitSeconds = extractWaitSeconds(msg);
-      if (waitSeconds) {
+      if (err?.response?.status === 429 && waitSeconds) {
         setOtpSent(true);
         setResendIn(waitSeconds);
       }

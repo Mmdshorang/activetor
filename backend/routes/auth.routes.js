@@ -218,6 +218,7 @@ router.post("/request-otp", async (req, res) => {
     }
 
     const otpCode = String(crypto.randomInt(100000, 999999));
+    await sendKavenegarOtp({ receptor: phone, token: otpCode });
     const codeHash = await bcrypt.hash(otpCode, 10);
 
     await db.OtpCode.create({
@@ -227,8 +228,6 @@ router.post("/request-otp", async (req, res) => {
       codeHash,
       expiresAt: new Date(Date.now() + OTP_EXPIRE_MINUTES * 60 * 1000),
     });
-
-    await sendKavenegarOtp({ receptor: phone, token: otpCode });
 
     return res.json({
       success: true,
