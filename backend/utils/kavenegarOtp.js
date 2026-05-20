@@ -2,7 +2,7 @@ const { sendKavenegarLookup } = require("./kavenegarLookup");
 const { sendKavenegarSms } = require("./kavenegarSms");
 
 const resolveOtpMode = () => {
-  const mode = String(process.env.KAVENEGAR_OTP_MODE || "").trim().toLowerCase();
+  const mode = String(process.env.KAVENEGAR_OTP_MODE || "sms").trim().toLowerCase();
   if (mode === "sms") return "sms";
   if (mode === "lookup") return "lookup";
   // Backward compatible default.
@@ -27,7 +27,7 @@ const sendKavenegarOtp = async ({ receptor, token }) => {
     });
   }
 
-  const template = process.env.KAVENEGAR_TEMPLATE;
+  const template = process.env.KAVENEGAR_TEMPLATE ||"verify";
   if (!template) {
     throw new Error("KAVENEGAR_TEMPLATE تنظیم نشده است");
   }
