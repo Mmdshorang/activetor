@@ -1,4 +1,11 @@
-const sendKavenegarLookup = async ({ receptor, template, token, token2, token3, type }) => {
+const sendKavenegarLookup = async ({
+  receptor,
+  template,
+  token,
+  token2,
+  token3,
+  type,
+}) => {
   const apiKey = process.env.KAVENEGAR_API_KEY;
   const lookupType = type || process.env.KAVENEGAR_TYPE || "sms";
 
@@ -26,7 +33,8 @@ const sendKavenegarLookup = async ({ receptor, template, token, token2, token3, 
   console.log("Sending Kavenegar lookup with query:", query.toString());
   const endpoint = `https://api.kavenegar.com/v1/${apiKey}/verify/lookup.json?${query.toString()}`;
   const response = await fetch(endpoint, { method: "GET" });
-
+  console.log("KAVENEGAR STATUS:", response.status);
+  console.log("KAVENEGAR RESPONSE:", text);
   if (!response.ok) {
     throw new Error(`Kavenegar HTTP ${response.status}`);
   }
