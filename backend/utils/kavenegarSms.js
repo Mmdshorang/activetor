@@ -1,14 +1,27 @@
 const normalizeReceptors = (receptor) => {
   if (!receptor) return "";
   if (Array.isArray(receptor)) {
-    return receptor.map((item) => String(item || "").trim()).filter(Boolean).join(",");
+    return receptor
+      .map((item) => String(item || "").trim())
+      .filter(Boolean)
+      .join(",");
   }
   return String(receptor).trim();
 };
 
 // Kavenegar "simple send" API:
 // https://api.kavenegar.com/v1/{API-KEY}/sms/send.json
-const sendKavenegarSms = async ({ receptor, message, sender, date, type, localid, hide, tag, policy }) => {
+const sendKavenegarSms = async ({
+  receptor,
+  message,
+  sender,
+  date,
+  type,
+  localid,
+  hide,
+  tag,
+  policy,
+}) => {
   const apiKey = process.env.KAVENEGAR_API_KEY;
   if (!apiKey) {
     throw new Error("KAVENEGAR_API_KEY تنظیم نشده است");
@@ -46,7 +59,8 @@ const sendKavenegarSms = async ({ receptor, message, sender, date, type, localid
     },
     body: payload.toString(),
   });
-
+  console.log("KAVENEGAR STATUS:", response.status);
+  console.log("KAVENEGAR RESPONSE:", text);
   if (!response.ok) {
     throw new Error(`Kavenegar HTTP ${response.status}`);
   }
@@ -64,4 +78,3 @@ const sendKavenegarSms = async ({ receptor, message, sender, date, type, localid
 module.exports = {
   sendKavenegarSms,
 };
-
