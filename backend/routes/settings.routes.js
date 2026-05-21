@@ -23,7 +23,7 @@ router.get("/sms-contract-expiry", async (req, res) => {
       key: SETTING_KEY,
       enabled: current.enabled === true,
       daysBeforeEnd: Number(current.daysBeforeEnd ?? defaults.daysBeforeEnd) || defaults.daysBeforeEnd,
-      template: current.template || defaults.template || null,
+      template: "contract",
       lastRunAt: current.lastRunAt || null,
       cron: process.env.SMS_CONTRACT_EXPIRY_CRON || "0 9 * * *",
       timezone: process.env.SMS_CRON_TZ || "Asia/Tehran",

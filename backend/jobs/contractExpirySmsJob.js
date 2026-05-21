@@ -4,8 +4,8 @@ const { normalizeIranPhone } = require("../utils/phone");
 const { getSetting, setSetting } = require("../utils/settings");
 const { parseDateOnly, todayUtcYmd, addDaysUtcYmd } = require("../utils/dateOnly");
 
-const SETTING_KEY = "sms.contract_expiry_reminder";
-const SMS_TYPE = "contract_expire_soon";
+const SETTING_KEY = "694A787A667A38326858303244707147527776314F413D3D";
+const SMS_TYPE = "sms";
 
 const toIsoDate = (value) => {
   return parseDateOnly(value);
