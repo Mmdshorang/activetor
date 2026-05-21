@@ -8,7 +8,7 @@ const sendKavenegarLookup = async ({
 }) => {
   const apiKey =
     process.env.KAVENEGAR_API_KEY || "694A787A667A38326858303244707147527776314F413D3D";
-  const lookupType = type || process.env.KAVENEGAR_TYPE;
+  const lookupType = type || process.env.KAVENEGAR_TYPE || "sms";
 
   if (!apiKey) {
     throw new Error("KAVENEGAR_API_KEY تنظیم نشده است");
