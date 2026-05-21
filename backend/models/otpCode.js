@@ -8,11 +8,12 @@ module.exports = (sequelize, DataTypes) => {
       },
       entityType: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true, // مهم: اجازه خالی بودن
+        defaultValue: "USER",
       },
       entityId: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true, // مهم: اجازه خالی بودن
       },
       codeHash: {
         type: DataTypes.STRING,

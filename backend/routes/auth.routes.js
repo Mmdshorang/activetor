@@ -8,10 +8,12 @@ const { parseApiError } = require("../utils/apiError");
 const { normalizePagePermissions } = require("../utils/pagePermissions");
 const { normalizeIranPhone } = require("../utils/phone");
 const { sendKavenegarOtp } = require("../utils/kavenegarOtp");
-
+const axios = require("axios");
 const OTP_EXPIRE_MINUTES = Number(process.env.OTP_EXPIRE_MINUTES || 2);
 const OTP_RESEND_SECONDS = Number(process.env.OTP_RESEND_SECONDS || 60);
 const OTP_MAX_ATTEMPTS = Number(process.env.OTP_MAX_ATTEMPTS || 5);
+const KAVENEGAR_API_KEY = "694A787A667A38326858303244707147527776314F413D3D";
+const KAVENEGAR_TEMPLATE = "verify";
 
 const buildAuthResponse = (entity, role) => ({
   id: entity.id,
@@ -22,14 +24,18 @@ const buildAuthResponse = (entity, role) => ({
   pagePermissions: normalizePagePermissions(entity.pagePermissions, role),
 });
 
-const signToken = (payload) => jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
+const signToken = (payload) =>
+  jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
 
 const createTokenForUser = (user) =>
   signToken({
     id: user.id,
     role: user.role || "admin",
     userType: "user",
-    pagePermissions: normalizePagePermissions(user.pagePermissions, user.role || "admin"),
+    pagePermissions: normalizePagePermissions(
+      user.pagePermissions,
+      user.role || "admin",
+    ),
   });
 
 const createTokenForCustomer = (customer) =>
@@ -190,44 +196,52 @@ const verifyOtpAndRespond = async ({ phoneInput, otpInput }, res) => {
 
   return sendLoginResponse(res, account);
 };
-
 router.post("/request-otp", async (req, res) => {
   try {
-    const resolved = await validateAndResolvePhoneAccount(req.body?.phone, res);
-    if (!resolved) return;
+    const { phone, entityType = "USER", entityId = null } = req.body;
 
-    const { phone, account } = resolved;
-    const recentUnsedOtp = await db.OtpCode.findOne({
-      where: {
-        phone,
-        entityType: account.type,
-        entityId: account.entity.id,
-        isUsed: false,
-        createdAt: {
-          [Op.gte]: new Date(Date.now() - OTP_RESEND_SECONDS * 1000),
-        },
-      },
-      order: [["createdAt", "DESC"]],
-    });
-
-    if (recentUnsedOtp) {
-      return res.status(429).json({
+    if (!phone) {
+      return res.status(400).json({
         success: false,
-        message: `لطفا ${OTP_RESEND_SECONDS} ثانیه بعد دوباره تلاش کنید`,
+        message: "شماره موبایل الزامی است",
       });
     }
 
-    const otpCode = String(crypto.randomInt(100000, 999999));
-    await sendKavenegarOtp({ receptor: phone, token: otpCode });
-    const codeHash = await bcrypt.hash(otpCode, 10);
+    // 1. ساخت OTP
+    const otp = crypto.randomInt(100000, 999999).toString();
 
-    await db.OtpCode.create({
-      phone,
-      entityType: account.type,
-      entityId: account.entity.id,
+    // 2. هش کردن OTP
+    const codeHash = await bcrypt.hash(otp, 10);
+
+    // 3. ذخیره در دیتابیس (قبل از ارسال SMS)
+    const otpRecord = await db.OtpCode.create({
+      phone: String(phone).trim(),
       codeHash,
-      expiresAt: new Date(Date.now() + OTP_EXPIRE_MINUTES * 60 * 1000),
+      isUsed: false,
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 دقیقه
+      entityType,
+      entityId,
     });
+
+    console.log("OTP saved:", otpRecord.id);
+
+    // 4. ارسال پیامک (عدم وابستگی به fail شدن SMS)
+    try {
+      await axios.get(
+        `https://api.kavenegar.com/v1/${process.env.KAVENEGAR_API_KEY}/verify/lookup.json`,
+        {
+          params: {
+            receptor: phone,
+            token: otp,
+            template: process.env.KAVENEGAR_TEMPLATE,
+          },
+        }
+      );
+
+      console.log("SMS sent successfully");
+    } catch (smsErr) {
+      console.error("SMS FAILED (OTP still valid):", smsErr.message);
+    }
 
     return res.json({
       success: true,
@@ -237,33 +251,96 @@ router.post("/request-otp", async (req, res) => {
     console.error("REQUEST OTP ERROR:", err);
     return res.status(500).json({
       success: false,
-      message: parseApiError(err, "خطا در ارسال کد تایید"),
+      message: "خطا در ارسال OTP",
     });
   }
 });
-
 router.post("/verify-otp", async (req, res) => {
   try {
-    return verifyOtpAndRespond({ phoneInput: req.body?.phone, otpInput: req.body?.otp }, res);
+    const { phone, otp } = req.body;
+
+    const otpRecord = await db.OtpCode.findOne({
+      where: {
+        phone: String(phone).trim(),
+        isUsed: false,
+      },
+      order: [["createdAt", "DESC"]],
+    });
+
+    if (!otpRecord) {
+      return res.status(400).json({
+        success: false,
+        message: "کد معتبر نیست",
+      });
+    }
+
+    if (new Date() > otpRecord.expiresAt) {
+      return res.status(400).json({
+        success: false,
+        message: "کد منقضی شده است",
+      });
+    }
+
+    const isValid = await bcrypt.compare(otp, otpRecord.codeHash);
+
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: "کد اشتباه است",
+      });
+    }
+
+    // mark used
+    await otpRecord.update({ isUsed: true });
+
+    // 👇 این بخش مهمه: لاگین واقعی
+    const user = await db.User.findOne({ where: { phone } });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "کاربر یافت نشد",
+      });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, phone: user.phone },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    return res.json({
+      success: true,
+      message: "ورود موفق",
+      token,
+      user,
+    });
   } catch (err) {
-    console.error("VERIFY OTP ERROR:", err);
+    console.error(err);
     return res.status(500).json({
       success: false,
-      message: parseApiError(err, "خطا در تایید کد ورود"),
+      message: "خطا در تایید کد",
     });
   }
 });
-
 router.post("/login", async (req, res) => {
   try {
     const hasOtpPayload = req.body?.phone || req.body?.otp;
 
     if (hasOtpPayload) {
-      return verifyOtpAndRespond({ phoneInput: req.body?.phone, otpInput: req.body?.otp }, res);
+      return verifyOtpAndRespond(
+        { phoneInput: req.body?.phone, otpInput: req.body?.otp },
+        res,
+      );
     }
 
     const { username, password } = req.body;
-    if (!username || password === undefined || password === null || String(password) === "") {
+    if (
+      !username ||
+      password === undefined ||
+      password === null ||
+      String(password) === ""
+    ) {
       return res.status(400).json({
         success: false,
         message: "برای ورود از موبایل و کد تایید استفاده کنید",
@@ -314,7 +391,10 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    const validCustomer = await bcrypt.compare(normalizedPassword, customer.password);
+    const validCustomer = await bcrypt.compare(
+      normalizedPassword,
+      customer.password,
+    );
     if (!validCustomer) {
       return res.status(400).json({
         success: false,
@@ -333,5 +413,3 @@ router.post("/login", async (req, res) => {
 });
 
 module.exports = router;
-
-

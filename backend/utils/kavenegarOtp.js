@@ -2,7 +2,7 @@ const { sendKavenegarLookup } = require("./kavenegarLookup");
 const { sendKavenegarSms } = require("./kavenegarSms");
 
 const resolveOtpMode = () => {
-  const mode = String(process.env.KAVENEGAR_OTP_MODE || "sms").trim().toLowerCase();
+  const mode = String(process.env.KAVENEGAR_OTP_MODE || "lookup").trim().toLowerCase();
   if (mode === "sms") return "sms";
   if (mode === "lookup") return "lookup";
   // Backward compatible default.
