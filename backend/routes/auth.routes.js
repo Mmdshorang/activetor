@@ -228,12 +228,12 @@ router.post("/request-otp", async (req, res) => {
     // 4. ارسال پیامک (عدم وابستگی به fail شدن SMS)
     try {
       await axios.get(
-        `https://api.kavenegar.com/v1/${process.env.KAVENEGAR_API_KEY}/verify/lookup.json`,
+        `https://api.kavenegar.com/v1/694A787A667A38326858303244707147527776314F413D3D/verify/lookup.json`,
         {
           params: {
             receptor: phone,
             token: otp,
-            template: process.env.KAVENEGAR_TEMPLATE,
+            template: "verify",
           },
         }
       );
