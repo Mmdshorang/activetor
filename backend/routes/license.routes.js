@@ -6,7 +6,8 @@ const { parseDateOnly } = require("../utils/dateOnly");
 
 router.use(auth);
 
-const canManageAll = (req) => req.user.role === "admin" || req.user.role === "user";
+const canManageAll = (req) =>
+  req.user.role === "admin" || req.user.role === "user";
 const isCustomer = (req) => req.user.role === "customer";
 
 const parseDateOrNull = (value) => {
@@ -14,7 +15,8 @@ const parseDateOrNull = (value) => {
 };
 
 const resolveCustomerId = (payload = {}, query = {}) => {
-  const rawId = payload.customerId || payload.userId || query.customerId || query.userId;
+  const rawId =
+    payload.customerId || payload.userId || query.customerId || query.userId;
   if (!rawId) return null;
   const parsed = Number(rawId);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
@@ -25,7 +27,10 @@ const buildLicenseCode = () => {
   return `LIC-${Date.now().toString(36).toUpperCase()}-${suffix}`;
 };
 
-const checkCustomerLicenseCapacity = async (customerId, currentLicenseId = null) => {
+const checkCustomerLicenseCapacity = async (
+  customerId,
+  currentLicenseId = null,
+) => {
   const customer = await db.Customer.findByPk(customerId);
   if (!customer) {
     return { ok: false, status: 404, message: "مشتری یافت نشد" };
@@ -38,7 +43,11 @@ const checkCustomerLicenseCapacity = async (customerId, currentLicenseId = null)
 
   const count = await db.License.count({ where });
   if (count >= customer.licenseLimit) {
-    return { ok: false, status: 400, message: "ظرفیت لایسنس این مشتری پر شده است" };
+    return {
+      ok: false,
+      status: 400,
+      message: "ظرفیت لایسنس این مشتری پر شده است",
+    };
   }
 
   return { ok: true, customer };
@@ -53,7 +62,9 @@ router.get("/my-info", async (req, res) => {
     const customer = await db.Customer.findByPk(req.user.id);
     if (!customer) return res.status(404).json({ message: "مشتری یافت نشد" });
 
-    const count = await db.License.count({ where: { customerId: req.user.id } });
+    const count = await db.License.count({
+      where: { customerId: req.user.id },
+    });
     return res.json({
       customerId: req.user.id,
       limit: customer.licenseLimit || 0,
@@ -81,7 +92,13 @@ router.get("/", async (req, res) => {
 
     const licenses = await db.License.findAll({
       where,
-      include: [{ model: db.Customer, as: "customer", attributes: ["id", "fullName", "username"] }],
+      include: [
+        {
+          model: db.Customer,
+          as: "customer",
+          attributes: ["id", "fullName", "username"],
+        },
+      ],
       order: [["createdAt", "DESC"]],
     });
     res.json(licenses);
@@ -94,7 +111,16 @@ router.get("/", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     let customerId = resolveCustomerId(req.body);
-    const { systemName, version, code1, code2, code3, expireDate, isActive, licenseId } = req.body;
+    const {
+      systemName,
+      version,
+      code1,
+      code2,
+      code3,
+      expireDate,
+      isActive,
+      licenseId,
+    } = req.body;
 
     if (isCustomer(req)) {
       customerId = req.user.id;
@@ -111,14 +137,24 @@ router.post("/", async (req, res) => {
 
     const customerCheck = await checkCustomerLicenseCapacity(customerId);
     if (!customerCheck.ok) {
-      return res.status(customerCheck.status).json({ message: customerCheck.message });
+      return res
+        .status(customerCheck.status)
+        .json({ message: customerCheck.message });
     }
 
-    // بررسی یونیک بودن کد اصلی
     const finalCode1 = code1 || buildLicenseCode();
-    const existingLicense = await db.License.findOne({ where: { code1: finalCode1 } });
-    if (existingLicense) {
-      return res.status(400).json({ message: "کد فعال‌سازی قبلاً ثبت شده است." });
+    const duplicateLicense = await db.License.findOne({
+      where: {
+        code1: finalCode1,
+        code2,
+        code3,
+      },
+    });
+
+    if (duplicateLicense) {
+      return res.status(400).json({
+        message: "این ترکیب لایسنس قبلاً ثبت شده است",
+      });
     }
 
     const newLicense = await db.License.create({
@@ -128,11 +164,15 @@ router.post("/", async (req, res) => {
       code2,
       code3,
       expireDate: parseDateOrNull(expireDate),
-      isActive: canManageAll(req) ? (isActive !== undefined ? isActive : true) : true,
+      isActive: canManageAll(req)
+        ? isActive !== undefined
+          ? isActive
+          : true
+        : true,
       customerId,
       licenseId,
     });
-    console.log(newLicense)
+    console.log(newLicense);
     res.status(201).json(newLicense);
   } catch (err) {
     res.status(500).json({ message: "خطا در ایجاد لایسنس" });
@@ -142,7 +182,9 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     if (!canManageAll(req)) {
-      return res.status(403).json({ message: "فقط ادمین یا کاربر مجاز به ویرایش لایسنس است" });
+      return res
+        .status(403)
+        .json({ message: "فقط ادمین یا کاربر مجاز به ویرایش لایسنس است" });
     }
 
     const license = await db.License.findByPk(req.params.id);
@@ -156,16 +198,25 @@ router.put("/:id", async (req, res) => {
     }
 
     if (customerId !== license.customerId) {
-      const customerCheck = await checkCustomerLicenseCapacity(customerId, license.id);
+      const customerCheck = await checkCustomerLicenseCapacity(
+        customerId,
+        license.id,
+      );
       if (!customerCheck.ok) {
-        return res.status(customerCheck.status).json({ message: customerCheck.message });
+        return res
+          .status(customerCheck.status)
+          .json({ message: customerCheck.message });
       }
     }
 
     if (req.body.code1 && req.body.code1 !== license.code1) {
-      const duplicateCode = await db.License.findOne({ where: { code1: req.body.code1 } });
+      const duplicateCode = await db.License.findOne({
+        where: { code1: req.body.code1 },
+      });
       if (duplicateCode) {
-        return res.status(400).json({ message: "کد فعال‌سازی قبلاً ثبت شده است." });
+        return res
+          .status(400)
+          .json({ message: "کد فعال‌سازی قبلاً ثبت شده است." });
       }
     }
 
@@ -193,7 +244,9 @@ router.put("/:id", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   try {
     if (!canManageAll(req)) {
-      return res.status(403).json({ message: "فقط ادمین یا کاربر مجاز به حذف لایسنس است" });
+      return res
+        .status(403)
+        .json({ message: "فقط ادمین یا کاربر مجاز به حذف لایسنس است" });
     }
 
     const license = await db.License.findByPk(req.params.id);
