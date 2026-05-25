@@ -24,6 +24,7 @@ import {
   resolveActivecodeServer,
   setActivecodeServerKey,
 } from "../config/externalServices";
+import CopyText from "../components/CopyText";
 
 export default function Licenses() {
   const authUser = getAuthUser();
@@ -50,7 +51,8 @@ export default function Licenses() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-
+  const [licenseModalOpen, setLicenseModalOpen] = useState(false);
+  const [createdLicense, setCreatedLicense] = useState(null);
   const [form, setForm] = useState({
     systemName: "",
     version: "",
@@ -165,13 +167,13 @@ export default function Licenses() {
 
   const saveLicense = async (e) => {
     e.preventDefault();
-    
+
     // 1. اعتبارسنجی‌های اولیه
     if (!form.customerId) {
       setError("مشتری را انتخاب کنید");
       return;
     }
-    
+
     // ظرفیت را چک کن
     if (licenseInfo && licenseInfo.count >= licenseInfo.limit) {
       setError("ظرفیت لایسنس این مشتری پر شده");
@@ -181,7 +183,7 @@ export default function Licenses() {
     try {
       setLoading(true);
       setError(""); // پاک کردن خطاهای قبلی
-      
+
       // آماده‌سازی داده‌ها
       const payload = {
         ...form,
@@ -213,7 +215,7 @@ export default function Licenses() {
       if (!activecodeUrl) {
         throw new Error("آدرس سرور لایسنس تنظیم نشده است");
       }
-    console.log(activecodeUrl)
+      console.log(activecodeUrl);
       const res = await axios.post(activecodeUrl, externalFormData);
 
       if (!res.data || !res.data.Message) {
@@ -228,8 +230,10 @@ export default function Licenses() {
         licenseId: licenseIdFromServer,
       };
 
-      await api.post("/licenses", finalPayload);
-
+      const result = await api.post("/licenses", finalPayload);
+      const savedLicense = result.data;
+      setCreatedLicense(savedLicense);
+      setLicenseModalOpen(true);
       setSuccess("لایسنس با موفقیت ثبت شد");
 
       // ریست کردن فرم و لود مجدد لیست‌ها
@@ -238,7 +242,6 @@ export default function Licenses() {
         loadLicenses(selectedCustomer),
         loadLicenseInfo(selectedCustomer),
       ]);
-
     } catch (error) {
       console.error("Error saving license:", error);
 
@@ -331,7 +334,9 @@ export default function Licenses() {
                       setActivecodeServerKeyState(s.key);
                       setActivecodeServerKey(s.key);
                     }}
-                    className={selected ? "panel-btn-primary" : "panel-btn-secondary"}
+                    className={
+                      selected ? "panel-btn-primary" : "panel-btn-secondary"
+                    }
                   >
                     {s.label}
                   </button>
@@ -348,7 +353,67 @@ export default function Licenses() {
           </div>
         </div>
       )}
+      {licenseModalOpen && createdLicense && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={() => setLicenseModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl bg-white p-5 shadow-2xl animate-fadeIn"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-800">
+                لایسنس ثبت شد 🎉
+              </h2>
 
+              <button
+                onClick={() => setLicenseModalOpen(false)}
+                className="text-gray-500 hover:text-red-500 text-xl"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span>نام سیستم:</span>
+                <CopyText value={createdLicense.systemName} />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span>نام مشتری:</span>
+                <CopyText value={createdLicense.customer?.fullName ??"-"} />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span>شماره موبایل:</span>
+                <CopyText value={createdLicense.customer?.phone??'-'} />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span>نام فروشگاه:</span>
+                <CopyText value={createdLicense.customer?.company??"-"} />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span>لایسینس:</span>
+                <CopyText value={createdLicense.licenseId} />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <button
+              onClick={() => setLicenseModalOpen(false)}
+              className="mt-5 w-full rounded-lg bg-blue-500 py-2 text-white hover:bg-blue-600 transition"
+            >
+              بستن
+            </button>
+          </div>
+        </div>
+      )}
       {licenseInfo && (
         <div className="panel-card p-4">
           <p className="text-sm text-slate-700 flex items-center gap-2">
@@ -380,7 +445,9 @@ export default function Licenses() {
             <div className="flex items-start gap-2">
               <Save size={18} className="text-teal-700 mt-0.5" />
               <div>
-                <h2 className="text-lg font-bold text-slate-900">ثبت لایسنس جدید</h2>
+                <h2 className="text-lg font-bold text-slate-900">
+                  ثبت لایسنس جدید
+                </h2>
                 <p className="text-sm text-slate-500 mt-1">
                   برای نمایش بهتر جدول، فرم در بالای صفحه باز/بسته می‌شود.
                 </p>
@@ -388,23 +455,23 @@ export default function Licenses() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (formOpen) {
-                      closeForm();
-                      return;
-                    }
-                    openCreateForm();
-                  }}
-                  className="panel-btn-primary"
-                  disabled={loading}
-                >
-                  {formOpen ? <X size={18} /> : <Plus size={18} />}
-                  {formOpen ? "بستن فرم" : "ثبت لایسنس"}
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (formOpen) {
+                    closeForm();
+                    return;
+                  }
+                  openCreateForm();
+                }}
+                className="panel-btn-primary"
+                disabled={loading}
+              >
+                {formOpen ? <X size={18} /> : <Plus size={18} />}
+                {formOpen ? "بستن فرم" : "ثبت لایسنس"}
+              </button>
             </div>
+          </div>
 
           {formOpen && (
             <div className="mt-6 border-t border-slate-100 pt-6">
@@ -499,7 +566,10 @@ export default function Licenses() {
       <div className="panel-card overflow-hidden">
         <div className="p-4 border-b border-slate-100">
           <div className="relative w-full md:w-80">
-            <Search className="absolute right-3 top-3 text-slate-400" size={16} />
+            <Search
+              className="absolute right-3 top-3 text-slate-400"
+              size={16}
+            />
             <input
               type="text"
               value={searchTerm}
@@ -515,9 +585,13 @@ export default function Licenses() {
             <thead>
               <tr>
                 <th>سیستم</th>
-                <th>نسخه</th>
+                {/* <th>نسخه</th> */}
                 <th>مشتری</th>
-                <th>کد اصلی</th>
+
+                <th>شماره موبایل</th>
+                <th>نام فروشگاه</th>
+
+                {/* <th>کد اصلی</th> */}
                 <th>شناسه لایسنس</th>
               </tr>
             </thead>
@@ -546,21 +620,22 @@ export default function Licenses() {
                         className="max-w-[160px]"
                       />
                     </td>
-                    <td className="min-w-[140px]">
-                      <OverflowTooltip
-                        text={license.version || "-"}
-                        className="max-w-[130px]"
-                      />
-                    </td>
+
                     <td className="min-w-[170px]">
                       <OverflowTooltip
                         text={license.customer?.fullName || "-"}
                         className="max-w-[160px]"
                       />
                     </td>
+                    <td className="min-w-[140px]">
+                      <OverflowTooltip
+                        text={license.customer?.phone || "-"}
+                        className="max-w-[130px]"
+                      />
+                    </td>
                     <td className="font-mono whitespace-nowrap" dir="ltr">
                       <OverflowTooltip
-                        text={license.code1 || "-"}
+                        text={license.customer?.company || "-"}
                         className="max-w-[130px]"
                         dir="ltr"
                       />

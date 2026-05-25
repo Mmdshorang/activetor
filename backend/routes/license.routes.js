@@ -96,7 +96,7 @@ router.get("/", async (req, res) => {
         {
           model: db.Customer,
           as: "customer",
-          attributes: ["id", "fullName", "username"],
+          attributes: ["id", "fullName", "username", "phone", "company"],
         },
       ],
       order: [["createdAt", "DESC"]],
@@ -196,8 +196,19 @@ router.post("/", async (req, res) => {
       customerId,
       licenseId,
     });
-    console.log(newLicense);
-    res.status(201).json(newLicense);
+
+    // دوباره fetch با relation
+    const licenseWithCustomer = await db.License.findByPk(newLicense.id, {
+      include: [
+        {
+          model: db.Customer,
+          as: "customer",
+          attributes: ["id", "fullName", "phone","company"],
+        },
+      ],
+    });
+
+    res.status(201).json(licenseWithCustomer);
   } catch (err) {
     res.status(500).json({ message: "خطا در ایجاد لایسنس" });
   }
