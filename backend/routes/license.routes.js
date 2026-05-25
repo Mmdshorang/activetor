@@ -146,14 +146,38 @@ router.post("/", async (req, res) => {
     const duplicateLicense = await db.License.findOne({
       where: {
         code1: finalCode1,
-        code2,
-        code3,
+        code2: code2 ?? null,
+        code3: code3 ?? null,
       },
+      include: [
+        {
+          model: db.Customer,
+          as: "customer",
+          attributes: ["id", "fullName", "username"],
+        },
+      ],
     });
 
     if (duplicateLicense) {
+      const customerName =
+        duplicateLicense.customer?.fullName ||
+        duplicateLicense.customer?.username ||
+        `ID: ${duplicateLicense.customerId}`;
+
       return res.status(400).json({
-        message: "این ترکیب لایسنس قبلاً ثبت شده است",
+        message: `این ترکیب لایسنس قبلاً برای ${customerName} ثبت شده است`,
+        duplicate: {
+          licenseId: duplicateLicense.id,
+          code1: duplicateLicense.code1,
+          code2: duplicateLicense.code2,
+          code3: duplicateLicense.code3,
+          customer: {
+            id: duplicateLicense.customer?.id,
+            name:
+              duplicateLicense.customer?.fullName ||
+              duplicateLicense.customer?.username,
+          },
+        },
       });
     }
 
