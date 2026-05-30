@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Phone, User, Lock, ArrowLeft, Loader2, ShieldCheck, KeyRound } from "lucide-react";
+import { Phone, User, Lock, ArrowLeft, Loader2, KeyRound } from "lucide-react";
 import api from "../services/api";
+
+const logoSrc = `${process.env.PUBLIC_URL || ""}/logo.jpg`;
 
 export default function Login() {
   const [mode, setMode] = useState("otp"); // otp | password
@@ -182,6 +184,12 @@ export default function Login() {
       <section className="hidden lg:flex relative overflow-hidden bg-gradient-to-br from-teal-900 via-slate-900 to-amber-900 p-12">
         <div className="absolute top-10 right-10 w-40 h-40 rounded-full bg-teal-400/20 blur-3xl animate-floaty" />
         <div className="absolute bottom-10 left-10 w-52 h-52 rounded-full bg-amber-400/20 blur-3xl animate-floaty" />
+        <div className="absolute top-10 right-10 z-10 flex items-center gap-3 text-white">
+          <span className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/15 bg-white/95 shadow-lg">
+            <img src={logoSrc} alt="حساب بان" className="h-10 w-10 object-contain" />
+          </span>
+          <span className="text-lg font-extrabold">حساب بان</span>
+        </div>
         <div className="relative z-10 self-end text-white max-w-md">
           <h1 className="font-display text-5xl leading-tight">مدیریت مشتریان حساب بان</h1>
           <p className="mt-4 text-slate-200 leading-8">
@@ -193,8 +201,8 @@ export default function Login() {
       <section className="flex items-center justify-center p-4 sm:p-8">
         <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900/90 backdrop-blur-xl p-6 sm:p-8 shadow-2xl">
           <div className="text-center mb-8">
-            <div className="inline-flex w-14 h-14 items-center justify-center rounded-2xl bg-teal-600/20 text-teal-300 mb-3">
-              <ShieldCheck size={30} />
+            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-3xl border border-slate-700 bg-white shadow-lg">
+              <img src={logoSrc} alt="حساب بان" className="h-14 w-14 object-contain" />
             </div>
             <h2 className="text-3xl font-extrabold text-white">ورود به پنل</h2>
             <p className="text-slate-400 text-sm mt-1">{subtitle}</p>
