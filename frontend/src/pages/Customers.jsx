@@ -566,21 +566,6 @@ export default function Customers() {
                   </div>
                 )}
 
-                {isAdmin && (
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      چرایی مشتری
-                    </label>
-                    <input
-                      type="text"
-                      name="supportStatus"
-                      value={form.supportStatus}
-                      onChange={handleChange}
-                      className="w-full pl-4 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
-                      placeholder="دلیل/وضعیت پشتیبانی مشتری"
-                    />
-                  </div>
-                )}
 
                 {!isAgent && (
                   <>
