@@ -1,30 +1,33 @@
 const CopyText = ({ value }) => {
-  const handleCopy = (text) => {
+  const handleCopy = async () => {
+    const text = typeof value === "object"
+      ? JSON.stringify(value)
+      : String(value || "");
+
     try {
       if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(text);
+        await navigator.clipboard.writeText(text);
       } else {
-        const textArea = document.createElement("textarea");
-        textArea.value = text;
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.left = "-999999px";
 
-        textArea.style.position = "fixed";
-        textArea.style.left = "-999999px";
-
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-
+        document.body.appendChild(textarea);
+        textarea.select();
         document.execCommand("copy");
-
-        textArea.remove();
+        document.body.removeChild(textarea);
       }
     } catch (err) {
       console.error(err);
     }
   };
+
   return (
     <div className="flex items-center justify-between gap-3">
-      <span className="text-sm text-gray-700">{value || "-"}</span>
+      <span className="text-sm text-gray-700">
+        {typeof value === "object" ? JSON.stringify(value) : value || "-"}
+      </span>
 
       <button
         onClick={handleCopy}
