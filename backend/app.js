@@ -10,6 +10,9 @@ const renewalRequestRoutes = require("./routes/renewal-request.routes");
 const customerRequestRoutes = require("./routes/customer-request.routes");
 const settingsRoutes = require("./routes/settings.routes");
 const { scheduleJobs } = require("./jobs/scheduler");
+const {
+  removeSingleCodeUniqueConstraints,
+} = require("./utils/licenseConstraints");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -70,7 +73,8 @@ app.use("/api/settings", settingsRoutes);
 // -------------------- DB + SERVER START --------------------
 db.sequelize
   .sync({ alter: true })
-  .then(() => {
+  .then(async () => {
+    await removeSingleCodeUniqueConstraints(db.sequelize);
     console.log("🟢 Database synced successfully");
 
     scheduleJobs(db);

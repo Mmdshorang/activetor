@@ -28,6 +28,20 @@ const buildLicenseCode = () => {
   return `LIC-${Date.now().toString(36).toUpperCase()}-${suffix}`;
 };
 
+const buildLicenseCodesWhere = (code1, code2, code3, excludeId = null) => {
+  const where = {
+    code1,
+    code2: code2 ?? null,
+    code3: code3 ?? null,
+  };
+
+  if (excludeId) {
+    where.id = { [Op.ne]: excludeId };
+  }
+
+  return where;
+};
+
 const checkCustomerLicenseCapacity = async (
   customerId,
   currentLicenseId = null,
@@ -151,11 +165,7 @@ router.post("/", async (req, res) => {
 
     const finalCode1 = code1 || buildLicenseCode();
     const duplicateLicense = await db.License.findOne({
-      where: {
-        code1: finalCode1,
-        code2: code2 ?? null,
-        code3: code3 ?? null,
-      },
+      where: buildLicenseCodesWhere(finalCode1, code2, code3),
       include: [
         {
           model: db.Customer,
@@ -257,15 +267,57 @@ router.put("/:id", async (req, res) => {
       }
     }
 
-    if (req.body.code1 && req.body.code1 !== license.code1) {
-      const duplicateCode = await db.License.findOne({
-        where: { code1: req.body.code1 },
+    const nextCode1 = Object.prototype.hasOwnProperty.call(req.body, "code1")
+      ? req.body.code1
+      : license.code1;
+    const nextCode2 = Object.prototype.hasOwnProperty.call(req.body, "code2")
+      ? req.body.code2
+      : license.code2;
+    const nextCode3 = Object.prototype.hasOwnProperty.call(req.body, "code3")
+      ? req.body.code3
+      : license.code3;
+
+    if (!nextCode1) {
+      return res.status(400).json({ message: "کد اول الزامی است" });
+    }
+
+    const duplicateLicense = await db.License.findOne({
+      where: buildLicenseCodesWhere(
+        nextCode1,
+        nextCode2,
+        nextCode3,
+        license.id,
+      ),
+      include: [
+        {
+          model: db.Customer,
+          as: "customer",
+          attributes: ["id", "fullName", "username"],
+        },
+      ],
+    });
+
+    if (duplicateLicense) {
+      const customerName =
+        duplicateLicense.customer?.fullName ||
+        duplicateLicense.customer?.username ||
+        `ID: ${duplicateLicense.customerId}`;
+
+      return res.status(400).json({
+        message: `این ترکیب لایسنس قبلاً برای ${customerName} ثبت شده است`,
+        duplicate: {
+          licenseId: duplicateLicense.id,
+          code1: duplicateLicense.code1,
+          code2: duplicateLicense.code2,
+          code3: duplicateLicense.code3,
+          customer: {
+            id: duplicateLicense.customer?.id,
+            name:
+              duplicateLicense.customer?.fullName ||
+              duplicateLicense.customer?.username,
+          },
+        },
       });
-      if (duplicateCode) {
-        return res
-          .status(400)
-          .json({ message: "کد فعال‌سازی قبلاً ثبت شده است." });
-      }
     }
 
     const updatePayload = {

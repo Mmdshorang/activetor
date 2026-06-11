@@ -49,6 +49,18 @@ const toPersianValidationMessage = (message, field) => {
 
 const parseApiError = (error, fallbackMessage) => {
   if (error instanceof UniqueConstraintError) {
+    const uniqueFields = Object.keys(error?.fields || {});
+    const parentDetail = String(error?.parent?.detail || "");
+
+    if (
+      ["code1", "code2", "code3"].every((field) =>
+        uniqueFields.includes(field),
+      ) ||
+      parentDetail.includes("(code1, code2, code3)")
+    ) {
+      return "این ترکیب لایسنس قبلا ثبت شده است";
+    }
+
     const field = error?.errors?.[0]?.path;
     if (field === "username") {
       return "این نام کاربری قبلا ثبت شده است";

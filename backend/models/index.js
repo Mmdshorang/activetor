@@ -18,6 +18,7 @@ db.OtpCode = require("./otpCode")(sequelize, Sequelize);
 db.AppSetting = require("./appSetting")(sequelize, Sequelize);
 db.SmsLog = require("./smsLog")(sequelize, Sequelize);
 db.CustomerRequest = require("./customerRequest")(sequelize, Sequelize);
+db.Log = require("./Log")(sequelize, Sequelize);
 
 Object.keys(db).forEach((modelName) => {
   if (db[modelName] && typeof db[modelName].associate === "function") {
