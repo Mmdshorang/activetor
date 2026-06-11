@@ -244,7 +244,10 @@ export default function Licenses() {
       ]);
     } catch (error) {
       console.error("Error saving license:", error);
-
+      console.log("Status:", error.response?.status);
+      console.log("Data:", error.response?.data);
+      console.log("Headers:", error.response?.headers);
+        console.log(error.response);
       if (error?.response) {
         setError(
           error.response?.data?.message ||
@@ -385,17 +388,17 @@ export default function Licenses() {
 
               <div className="flex items-center justify-between">
                 <span>نام مشتری:</span>
-                <CopyText value={createdLicense.customer?.fullName ??"-"} />
+                <CopyText value={createdLicense.customer?.fullName ?? "-"} />
               </div>
 
               <div className="flex items-center justify-between">
                 <span>شماره موبایل:</span>
-                <CopyText value={createdLicense.customer?.phone??'-'} />
+                <CopyText value={createdLicense.customer?.phone ?? "-"} />
               </div>
 
               <div className="flex items-center justify-between">
                 <span>نام فروشگاه:</span>
-                <CopyText value={createdLicense.customer?.company??"-"} />
+                <CopyText value={createdLicense.customer?.company ?? "-"} />
               </div>
 
               <div className="flex items-center justify-between">

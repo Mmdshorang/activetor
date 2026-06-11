@@ -2,6 +2,7 @@ const router = require("express").Router();
 const db = require("../models");
 const { Op } = require("sequelize");
 const { auth } = require("../middleware/authorize");
+const { parseApiError, logApiError } = require("../utils/apiError");
 const { parseDateOnly } = require("../utils/dateOnly");
 
 router.use(auth);
@@ -72,7 +73,10 @@ router.get("/my-info", async (req, res) => {
       remaining: Math.max((customer.licenseLimit || 0) - count, 0),
     });
   } catch (error) {
-    return res.status(500).json({ message: "خطا در دریافت اطلاعات لایسنس" });
+    console.error("License my-info failed:", error);
+    return res
+      .status(500)
+      .json({ message: parseApiError(error, "خطا در دریافت اطلاعات لایسنس") });
   }
 });
 
@@ -103,7 +107,10 @@ router.get("/", async (req, res) => {
     });
     res.json(licenses);
   } catch (error) {
-    res.status(500).json({ message: "خطا در دریافت لایسنس ها" });
+    console.error("License list failed:", error);
+    res
+      .status(500)
+      .json({ message: parseApiError(error, "خطا در دریافت لایسنس ها") });
   }
 });
 
@@ -210,7 +217,13 @@ router.post("/", async (req, res) => {
 
     res.status(201).json(licenseWithCustomer);
   } catch (err) {
-    res.status(500).json({ message: "خطا در ایجاد لایسنس" });
+    logApiError("License create failed", err, {
+      body: req.body,
+      user: { id: req.user?.id, role: req.user?.role },
+    });
+    res
+      .status(500)
+      .json({ message: parseApiError(err, "خطا در ایجاد لایسنس") });
   }
 });
 
@@ -271,7 +284,10 @@ router.put("/:id", async (req, res) => {
     await license.update(updatePayload);
     return res.json(license);
   } catch (error) {
-    return res.status(500).json({ message: "خطا در ویرایش لایسنس" });
+    console.error("License update failed:", error);
+    return res
+      .status(500)
+      .json({ message: parseApiError(error, "خطا در ویرایش لایسنس") });
   }
 });
 
@@ -291,7 +307,10 @@ router.delete("/:id", async (req, res) => {
     await license.destroy();
     res.json({ message: "لایسنس با موفقیت حذف شد" });
   } catch (err) {
-    res.status(500).json({ message: "خطا در حذف لایسنس" });
+    console.error("License delete failed:", err);
+    res
+      .status(500)
+      .json({ message: parseApiError(err, "خطا در حذف لایسنس") });
   }
 });
 

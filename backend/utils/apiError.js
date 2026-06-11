@@ -15,6 +15,14 @@ const fieldLabels = {
   contractStartDate: "تاریخ شروع قرارداد",
   contractEndDate: "تاریخ پایان قرارداد",
   userId: "کاربر مالک",
+  customerId: "مشتری",
+  systemName: "نام سیستم",
+  version: "نسخه",
+  code1: "کد اول",
+  code2: "کد دوم",
+  code3: "کد سوم",
+  licenseId: "شناسه لایسنس",
+  expireDate: "تاریخ انقضا",
 };
 
 const normalizeField = (field) => fieldLabels[field] || field || "فیلد";
@@ -74,6 +82,51 @@ const parseApiError = (error, fallbackMessage) => {
   return fallbackMessage || "خطای داخلی سرور";
 };
 
+const sanitizeMetadata = (metadata = {}) => {
+  const copy = { ...metadata };
+
+  if (copy.body) {
+    copy.body = {
+      customerId: copy.body.customerId || copy.body.userId,
+      systemName: copy.body.systemName,
+      version: copy.body.version,
+      hasCode1: Boolean(copy.body.code1),
+      hasCode2: Boolean(copy.body.code2),
+      hasCode3: Boolean(copy.body.code3),
+      hasLicenseId: Boolean(copy.body.licenseId),
+      expireDate: copy.body.expireDate,
+    };
+  }
+
+  return copy;
+};
+
+const logApiError = (context, error, metadata = {}) => {
+  const parent = error?.parent || error?.original || {};
+
+  console.error(`${context}:`, {
+    name: error?.name,
+    message: error?.message,
+    details: error?.errors?.map((item) => ({
+      message: item.message,
+      path: item.path,
+      value: item.value,
+      type: item.type,
+    })),
+    db: {
+      code: parent.code,
+      detail: parent.detail,
+      constraint: parent.constraint,
+      table: parent.table,
+      column: parent.column,
+    },
+    sql: error?.sql,
+    metadata: sanitizeMetadata(metadata),
+    stack: error?.stack,
+  });
+};
+
 module.exports = {
   parseApiError,
+  logApiError,
 };
