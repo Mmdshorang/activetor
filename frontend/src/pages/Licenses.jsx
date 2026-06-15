@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Search,
@@ -10,6 +10,7 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
+  Trash2,
 } from "lucide-react";
 import api from "../services/api";
 import SearchableSelect from "../components/SearchableSelect";
@@ -49,10 +50,13 @@ export default function Licenses() {
   const [formOpen, setFormOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deleteLoadingId, setDeleteLoadingId] = useState(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [licenseModalOpen, setLicenseModalOpen] = useState(false);
   const [createdLicense, setCreatedLicense] = useState(null);
+  const savingRef = useRef(false);
   const [form, setForm] = useState({
     systemName: "",
     version: "",
@@ -151,6 +155,7 @@ export default function Licenses() {
       code2: "",
       code3: "",
       customerId: selectedCustomer,
+      licenseId: "",
     });
   };
 
@@ -167,10 +172,15 @@ export default function Licenses() {
 
   const saveLicense = async (e) => {
     e.preventDefault();
+    if (savingRef.current) return;
 
     // 1. اعتبارسنجی‌های اولیه
     if (!form.customerId) {
       setError("مشتری را انتخاب کنید");
+      return;
+    }
+    if (!form.systemName.trim() || !form.version || !form.code1.trim()) {
+      setError("نام سیستم، نسخه و کد اصلی الزامی است");
       return;
     }
 
@@ -181,15 +191,22 @@ export default function Licenses() {
     }
 
     try {
-      setLoading(true);
+      savingRef.current = true;
+      setSaving(true);
       setError(""); // پاک کردن خطاهای قبلی
 
       // آماده‌سازی داده‌ها
-      const payload = {
-        ...form,
+      const internalPayload = {
+        systemName: form.systemName.trim(),
+        version: form.version,
+        code1: form.code1.trim(),
+        code2: form.code2.trim() || null,
+        code3: form.code3.trim() || null,
+        customerId: Number(form.customerId),
       };
 
       // --- حالت ثبت جدید ---
+      await api.post("/licenses/validate", internalPayload);
 
       // مرحله اول: دریافت لایسنس از API خارجی
       const activatorUser =
@@ -205,9 +222,9 @@ export default function Licenses() {
         name: customerName,
         shop: customerShop,
         mobile: customerMobile,
-        key1: form.code1,
-        key2: form.code2,
-        key3: form.code3,
+        key1: internalPayload.code1,
+        key2: internalPayload.code2 || "",
+        key3: internalPayload.code3 || "",
         code: customerAddress,
       });
 
@@ -215,7 +232,6 @@ export default function Licenses() {
       if (!activecodeUrl) {
         throw new Error("آدرس سرور لایسنس تنظیم نشده است");
       }
-      console.log(activecodeUrl);
       const res = await axios.post(activecodeUrl, externalFormData);
 
       if (!res.data || !res.data.Message) {
@@ -226,7 +242,7 @@ export default function Licenses() {
 
       // مرحله دوم: ذخیره در دیتابیس خودمان
       const finalPayload = {
-        ...payload,
+        ...internalPayload,
         licenseId: licenseIdFromServer,
       };
 
@@ -244,10 +260,6 @@ export default function Licenses() {
       ]);
     } catch (error) {
       console.error("Error saving license:", error);
-      console.log("Status:", error.response?.status);
-      console.log("Data:", error.response?.data);
-      console.log("Headers:", error.response?.headers);
-        console.log(error.response);
       if (error?.response) {
         setError(
           error.response?.data?.message ||
@@ -261,7 +273,28 @@ export default function Licenses() {
         );
       }
     } finally {
-      setLoading(false);
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
+
+  const deleteLicense = async (license) => {
+    if (!window.confirm("آیا از حذف این لایسنس مطمئن هستید؟")) return;
+
+    try {
+      setDeleteLoadingId(license.id);
+      setError("");
+      setSuccess("");
+      await api.delete(`/licenses/${license.id}`);
+      setSuccess("لایسنس حذف شد");
+      await Promise.all([
+        loadLicenses(selectedCustomer),
+        loadLicenseInfo(selectedCustomer),
+      ]);
+    } catch (err) {
+      setError(err?.response?.data?.message || "خطا در حذف لایسنس");
+    } finally {
+      setDeleteLoadingId(null);
     }
   };
 
@@ -468,7 +501,7 @@ export default function Licenses() {
                   openCreateForm();
                 }}
                 className="panel-btn-primary"
-                disabled={loading}
+                disabled={loading || saving}
               >
                 {formOpen ? <X size={18} /> : <Plus size={18} />}
                 {formOpen ? "بستن فرم" : "ثبت لایسنس"}
@@ -551,9 +584,9 @@ export default function Licenses() {
                 <button
                   type="submit"
                   className="panel-btn-primary w-full"
-                  disabled={loading}
+                  disabled={saving}
                 >
-                  {loading ? (
+                  {saving ? (
                     <Loader2 className="animate-spin" size={16} />
                   ) : (
                     <Save size={16} />
@@ -596,12 +629,16 @@ export default function Licenses() {
 
                 {/* <th>کد اصلی</th> */}
                 <th>شناسه لایسنس</th>
+                {canManageAll && <th>عملیات</th>}
               </tr>
             </thead>
             <tbody>
               {loading && licenses.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="py-8 text-center text-slate-500">
+                  <td
+                    colSpan={canManageAll ? 6 : 5}
+                    className="py-8 text-center text-slate-500"
+                  >
                     <span className="inline-flex items-center gap-2">
                       <Loader2 className="animate-spin" size={16} />
                       در حال بارگذاری...
@@ -610,7 +647,10 @@ export default function Licenses() {
                 </tr>
               ) : filteredLicenses.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="py-8 text-center text-slate-500">
+                  <td
+                    colSpan={canManageAll ? 6 : 5}
+                    className="py-8 text-center text-slate-500"
+                  >
                     نتیجه ای یافت نشد.
                   </td>
                 </tr>
@@ -650,6 +690,23 @@ export default function Licenses() {
                         dir="ltr"
                       />
                     </td>
+                    {canManageAll && (
+                      <td>
+                        <button
+                          type="button"
+                          onClick={() => deleteLicense(license)}
+                          disabled={deleteLoadingId === license.id}
+                          className="panel-btn-danger py-1.5 px-3"
+                        >
+                          {deleteLoadingId === license.id ? (
+                            <Loader2 className="animate-spin" size={14} />
+                          ) : (
+                            <Trash2 size={14} />
+                          )}
+                          حذف
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
