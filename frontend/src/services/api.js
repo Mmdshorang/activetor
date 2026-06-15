@@ -15,7 +15,7 @@ api.interceptors.request.use(
 
     config.headers = config.headers || {};
 
-    if (token) {
+    if (token && !isAuthEndpoint(config.url)) {
       config.headers.Authorization = `Bearer ${token}`;
     }
 
@@ -26,18 +26,35 @@ api.interceptors.request.use(
 
 let isRedirectingToLogin = false;
 
+const authFailureStatuses = new Set([401, 403]);
+
+const isAuthEndpoint = (url = "") => String(url).startsWith("/auth/");
+
+const getAuthorizationHeader = (headers) => {
+  if (!headers) return null;
+
+  if (typeof headers.get === "function") {
+    return headers.get("Authorization") || headers.get("authorization");
+  }
+
+  return headers.Authorization || headers.authorization;
+};
+
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error?.response?.status;
+    const isAuthRequest = isAuthEndpoint(error?.config?.url);
+    const requestHadToken = Boolean(getAuthorizationHeader(error?.config?.headers));
+    const isInsideApp = window.location.pathname !== "/";
 
-    if (status === 401 && !isRedirectingToLogin) {
-      isRedirectingToLogin = true;
-
+    if (authFailureStatuses.has(status) && !isAuthRequest && (requestHadToken || isInsideApp)) {
       clearAuth();
 
-      if (window.location.pathname !== "/") {
+      if (isInsideApp && !isRedirectingToLogin) {
+        isRedirectingToLogin = true;
         window.location.replace("/");
+        return new Promise(() => {});
       }
     }
 
