@@ -350,7 +350,7 @@ export default function Login() {
               {loading ? (
                 <>
                   <Loader2 className="animate-spin" size={18} />
-                  در حال بررسی...
+                  در حال بررسی....
                 </>
               ) : (
                 <>
