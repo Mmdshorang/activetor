@@ -23,22 +23,8 @@ const resolveCustomerId = (payload = {}, query = {}) => {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 };
 
-const buildLicenseCode = () => {
-  const suffix = Math.random().toString(36).slice(2, 10).toUpperCase();
-  return `LIC-${Date.now().toString(36).toUpperCase()}-${suffix}`;
-};
-
-const normalizeRequiredLicenseCode = (value) => {
-  // License codes are opaque values; whitespace is part of the code.
-  const normalized = String(value ?? "");
-  return normalized || null;
-};
-
-const normalizeOptionalLicenseCode = (value) => {
-  // Only an actually empty value is omitted. Do not trim meaningful spaces.
-  const normalized = String(value ?? "");
-  return normalized || null;
-};
+// License codes are opaque values; preserve empty strings and all whitespace.
+const normalizeLicenseCode = (value) => String(value ?? "");
 
 const buildLicenseCodesWhere = (code1, code2, code3, excludeId = null) => {
   const where = {
@@ -46,8 +32,8 @@ const buildLicenseCodesWhere = (code1, code2, code3, excludeId = null) => {
   };
 
   const and = [];
-  const normalizedCode2 = normalizeOptionalLicenseCode(code2);
-  const normalizedCode3 = normalizeOptionalLicenseCode(code3);
+  const normalizedCode2 = normalizeLicenseCode(code2);
+  const normalizedCode3 = normalizeLicenseCode(code3);
 
   if (normalizedCode2) {
     where.code2 = normalizedCode2;
@@ -73,8 +59,6 @@ const buildLicenseCodesWhere = (code1, code2, code3, excludeId = null) => {
 };
 
 const findDuplicateLicense = async (code1, code2, code3, excludeId = null) => {
-  if (!code1) return null;
-
   return db.License.findOne({
     where: buildLicenseCodesWhere(code1, code2, code3, excludeId),
     include: [
@@ -186,7 +170,7 @@ router.post("/validate", async (req, res) => {
   try {
     let customerId = resolveCustomerId(req.body);
     const { systemName, version, code2, code3 } = req.body;
-    const code1 = normalizeRequiredLicenseCode(req.body.code1);
+    const code1 = normalizeLicenseCode(req.body.code1);
 
     if (isCustomer(req)) {
       customerId = req.user.id;
@@ -200,10 +184,6 @@ router.post("/validate", async (req, res) => {
     if (!systemName || !version) {
       return res.status(400).json({ message: "نام سیستم و نسخه الزامی است" });
     }
-    if (!code1) {
-      return res.status(400).json({ message: "کد اول الزامی است" });
-    }
-
     const customerCheck = await checkCustomerLicenseCapacity(customerId);
     if (!customerCheck.ok) {
       return res
@@ -238,9 +218,9 @@ router.post("/", async (req, res) => {
       isActive,
       licenseId,
     } = req.body;
-    const code1 = normalizeRequiredLicenseCode(req.body.code1);
-    const code2 = normalizeOptionalLicenseCode(req.body.code2);
-    const code3 = normalizeOptionalLicenseCode(req.body.code3);
+    const code1 = normalizeLicenseCode(req.body.code1);
+    const code2 = normalizeLicenseCode(req.body.code2);
+    const code3 = normalizeLicenseCode(req.body.code3);
 
     if (isCustomer(req)) {
       customerId = req.user.id;
@@ -262,9 +242,8 @@ router.post("/", async (req, res) => {
         .json({ message: customerCheck.message });
     }
 
-    const finalCode1 = code1 || buildLicenseCode();
     const duplicateLicense = await findDuplicateLicense(
-      finalCode1,
+      code1,
       code2,
       code3,
     );
@@ -278,7 +257,7 @@ router.post("/", async (req, res) => {
     const newLicense = await db.License.create({
       systemName,
       version,
-      code1: finalCode1,
+      code1,
       code2,
       code3,
       expireDate: parseDateOrNull(expireDate),
@@ -345,18 +324,14 @@ router.put("/:id", async (req, res) => {
     }
 
     const nextCode1 = Object.prototype.hasOwnProperty.call(req.body, "code1")
-      ? normalizeRequiredLicenseCode(req.body.code1)
+      ? normalizeLicenseCode(req.body.code1)
       : license.code1;
     const nextCode2 = Object.prototype.hasOwnProperty.call(req.body, "code2")
-      ? normalizeOptionalLicenseCode(req.body.code2)
+      ? normalizeLicenseCode(req.body.code2)
       : license.code2;
     const nextCode3 = Object.prototype.hasOwnProperty.call(req.body, "code3")
-      ? normalizeOptionalLicenseCode(req.body.code3)
+      ? normalizeLicenseCode(req.body.code3)
       : license.code3;
-
-    if (!nextCode1) {
-      return res.status(400).json({ message: "کد اول الزامی است" });
-    }
 
     const duplicateLicense = await findDuplicateLicense(
       nextCode1,

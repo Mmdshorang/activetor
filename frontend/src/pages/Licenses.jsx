@@ -179,8 +179,8 @@ export default function Licenses() {
       setError("مشتری را انتخاب کنید");
       return;
     }
-    if (!form.systemName.trim() || !form.version || form.code1 === "") {
-      setError("نام سیستم، نسخه و کد اصلی الزامی است");
+    if (!form.systemName.trim() || !form.version) {
+      setError("نام سیستم و نسخه الزامی است");
       return;
     }
 
@@ -201,8 +201,8 @@ export default function Licenses() {
         version: form.version,
         // License codes are sent byte-for-byte as entered; spaces are meaningful.
         code1: form.code1,
-        code2: form.code2 === "" ? null : form.code2,
-        code3: form.code3 === "" ? null : form.code3,
+        code2: form.code2,
+        code3: form.code3,
         customerId: Number(form.customerId),
       };
 
@@ -224,8 +224,8 @@ export default function Licenses() {
         shop: customerShop,
         mobile: customerMobile,
         key1: internalPayload.code1,
-        key2: internalPayload.code2 ?? "",
-        key3: internalPayload.code3 ?? "",
+        key2: internalPayload.code2,
+        key3: internalPayload.code3,
         code: customerAddress,
       });
 
