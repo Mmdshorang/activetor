@@ -1,5 +1,5 @@
 import axios from "axios";
-import { clearAuth } from "../utils/auth";
+import { clearAuth, getAuthToken } from "../utils/auth";
 
 // In dev you can set REACT_APP_API_BASE_URL=http://localhost:5000/api
 // In production (nginx) we use /api which proxies to backend.
@@ -11,7 +11,7 @@ const api = axios.create({
 
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
 
     config.headers = config.headers || {};
 

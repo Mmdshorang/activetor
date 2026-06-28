@@ -179,7 +179,7 @@ export default function Licenses() {
       setError("مشتری را انتخاب کنید");
       return;
     }
-    if (!form.systemName.trim() || !form.version || !form.code1.trim()) {
+    if (!form.systemName.trim() || !form.version || form.code1 === "") {
       setError("نام سیستم، نسخه و کد اصلی الزامی است");
       return;
     }
@@ -199,9 +199,10 @@ export default function Licenses() {
       const internalPayload = {
         systemName: form.systemName.trim(),
         version: form.version,
-        code1: form.code1.trim(),
-        code2: form.code2.trim() || null,
-        code3: form.code3.trim() || null,
+        // License codes are sent byte-for-byte as entered; spaces are meaningful.
+        code1: form.code1,
+        code2: form.code2 === "" ? null : form.code2,
+        code3: form.code3 === "" ? null : form.code3,
         customerId: Number(form.customerId),
       };
 
@@ -223,8 +224,8 @@ export default function Licenses() {
         shop: customerShop,
         mobile: customerMobile,
         key1: internalPayload.code1,
-        key2: internalPayload.code2 || "",
-        key3: internalPayload.code3 || "",
+        key2: internalPayload.code2 ?? "",
+        key3: internalPayload.code3 ?? "",
         code: customerAddress,
       });
 

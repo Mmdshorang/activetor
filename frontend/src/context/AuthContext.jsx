@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import api from '../services/api';
+import { clearAuth, getAuthToken, setAuth } from '../utils/auth';
 
 const AuthContext = createContext();
 
@@ -10,7 +11,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = getAuthToken();
     if (token) {
       // In a real app, verify token with backend here
       setUser({ role: 'admin' }); // Mock user data
@@ -21,7 +22,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (username, password) => {
     try {
       const res = await api.post('/auth/login', { username, password });
-      localStorage.setItem('token', res.data.token);
+      setAuth({ token: res.data.token, user: res.data.user });
       setUser(res.data.user);
       return true;
     } catch (err) {
@@ -31,7 +32,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
+    clearAuth();
     setUser(null);
   };
 

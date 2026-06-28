@@ -10,11 +10,11 @@ import Contracts from "./pages/Contracts";
 import RenewalRequests from "./pages/RenewalRequests";
 import Trash from "./pages/Trash";
 import DashboardLayout from "./layout/DashboardLayout";
-import { canAccessPage, getAuthUser } from "./utils/auth";
+import { canAccessPage, getAuthToken, getAuthUser } from "./utils/auth";
 import { PAGE_DEFINITIONS } from "./constants/pagePermissions";
 
 function ProtectedRoute({ children }) {
-  const token = localStorage.getItem("token");
+  const token = getAuthToken();
   const user = getAuthUser();
   if (!token || !user) {
     return <Navigate to="/" replace />;

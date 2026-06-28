@@ -1,8 +1,28 @@
 import { ROLE_DEFAULT_PAGE_PERMISSIONS } from "../constants/pagePermissions";
 
+const TOKEN_KEY = "token";
+const AUTH_USER_KEY = "authUser";
+
+const clearLegacyAuth = () => {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(AUTH_USER_KEY);
+};
+
+export const getAuthToken = () => {
+  clearLegacyAuth();
+  return sessionStorage.getItem(TOKEN_KEY);
+};
+
+export const setAuth = ({ token, user }) => {
+  clearLegacyAuth();
+  sessionStorage.setItem(TOKEN_KEY, token);
+  sessionStorage.setItem(AUTH_USER_KEY, JSON.stringify(user || null));
+};
+
 export const getAuthUser = () => {
   try {
-    const raw = localStorage.getItem("authUser");
+    clearLegacyAuth();
+    const raw = sessionStorage.getItem(AUTH_USER_KEY);
     if (!raw) return null;
     const user = JSON.parse(raw);
     if (!user) return null;
@@ -29,6 +49,7 @@ export const canAccessPage = (user, pageKey) => {
 };
 
 export const clearAuth = () => {
-  localStorage.removeItem("token");
-  localStorage.removeItem("authUser");
+  clearLegacyAuth();
+  sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(AUTH_USER_KEY);
 };

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Phone, User, Lock, ArrowLeft, Loader2, KeyRound } from "lucide-react";
 import api from "../services/api";
+import { setAuth } from "../utils/auth";
 
 const logoSrc = `${process.env.PUBLIC_URL || ""}/logo.jpg`;
 
@@ -92,8 +93,7 @@ export default function Login() {
 
   const persistAuthAndRedirect = (res) => {
     if (res?.data?.success && res?.data?.token) {
-      localStorage.setItem("token", res.data.token);
-      localStorage.setItem("authUser", JSON.stringify(res.data.user || null));
+      setAuth({ token: res.data.token, user: res.data.user });
       window.location.href = "/dashboard";
       return true;
     }

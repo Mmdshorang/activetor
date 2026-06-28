@@ -29,12 +29,14 @@ const buildLicenseCode = () => {
 };
 
 const normalizeRequiredLicenseCode = (value) => {
-  const normalized = String(value || "").trim();
+  // License codes are opaque values; whitespace is part of the code.
+  const normalized = String(value ?? "");
   return normalized || null;
 };
 
 const normalizeOptionalLicenseCode = (value) => {
-  const normalized = String(value || "").trim();
+  // Only an actually empty value is omitted. Do not trim meaningful spaces.
+  const normalized = String(value ?? "");
   return normalized || null;
 };
 
