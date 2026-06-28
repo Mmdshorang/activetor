@@ -16,7 +16,7 @@ export const ACTIVECODE_SERVERS = [
   {
     key: "internal",
     label: "داخلی",
-    baseUrl: normalizeBaseUrl("http://192.168.1.16:8091"),
+    baseUrl: normalizeBaseUrl("http://192.168.1.16:4000"),
   },
 ];
 
