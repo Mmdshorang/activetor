@@ -1,5 +1,7 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { QRCodeSVG } from "qrcode.react";
+
 import {
   Search,
   KeyRound,
@@ -57,6 +59,7 @@ export default function Licenses() {
   const [licenseModalOpen, setLicenseModalOpen] = useState(false);
   const [createdLicense, setCreatedLicense] = useState(null);
   const savingRef = useRef(false);
+  const [qrLicense, setQrLicense] = useState(null);
   const [form, setForm] = useState({
     systemName: "",
     version: "",
@@ -462,6 +465,82 @@ export default function Licenses() {
           </p>
         </div>
       )}
+{qrLicense && (
+  <div
+    className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+    onClick={() => setQrLicense(null)}
+  >
+    <div
+      className="w-full max-w-sm rounded-2xl bg-white shadow-2xl overflow-hidden"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900">
+            QR لایسنس
+          </h2>
+
+          <p className="mt-1 text-xs text-slate-500">
+            برای مشاهده یا فعال‌سازی لایسنس اسکن کنید
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setQrLicense(null)}
+          className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-red-500"
+          aria-label="بستن"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      {/* QR */}
+      <div className="flex flex-col items-center px-6 py-6">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <QRCodeSVG
+            value={qrLicense.licenseId}
+            size={220}
+            level="H"
+            includeMargin
+          />
+        </div>
+
+        <div className="mt-5 w-full rounded-xl bg-slate-50 p-3 text-center">
+          <div className="mb-1 text-xs text-slate-500">
+            شناسه لایسنس
+          </div>
+
+          <div
+            className="break-all font-mono text-sm font-semibold text-slate-800"
+            dir="ltr"
+          >
+            {qrLicense.licenseId || "-"}
+          </div>
+        </div>
+
+        <div className="mt-3 text-center text-xs text-slate-400">
+          {qrLicense.customer?.fullName || "-"}
+          {qrLicense.customer?.company
+            ? ` • ${qrLicense.customer.company}`
+            : ""}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="border-t border-slate-100 bg-slate-50 px-5 py-4">
+        <button
+          type="button"
+          onClick={() => setQrLicense(null)}
+          className="panel-btn-primary w-full justify-center"
+        >
+          بستن
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
       {success && (
         <div className="panel-alert-success flex items-center gap-2">
@@ -630,6 +709,7 @@ export default function Licenses() {
 
                 {/* <th>کد اصلی</th> */}
                 <th>شناسه لایسنس</th>
+
                 {canManageAll && <th>عملیات</th>}
               </tr>
             </thead>
@@ -691,21 +771,32 @@ export default function Licenses() {
                         dir="ltr"
                       />
                     </td>
+
                     {canManageAll && (
                       <td>
-                        <button
-                          type="button"
-                          onClick={() => deleteLicense(license)}
-                          disabled={deleteLoadingId === license.id}
-                          className="panel-btn-danger py-1.5 px-3"
-                        >
-                          {deleteLoadingId === license.id ? (
-                            <Loader2 className="animate-spin" size={14} />
-                          ) : (
-                            <Trash2 size={14} />
-                          )}
-                          حذف
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setQrLicense(license)}
+                            className="panel-btn-secondary py-1.5 px-3"
+                          >
+                            QR
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => deleteLicense(license)}
+                            disabled={deleteLoadingId === license.id}
+                            className="panel-btn-danger py-1.5 px-3"
+                          >
+                            {deleteLoadingId === license.id ? (
+                              <Loader2 className="animate-spin" size={14} />
+                            ) : (
+                              <Trash2 size={14} />
+                            )}
+                            حذف
+                          </button>
+                        </div>
                       </td>
                     )}
                   </tr>
