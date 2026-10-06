@@ -757,7 +757,7 @@ export default function Licenses() {
                         className="max-w-[130px]"
                       />
                     </td>
-                    <td className="font-mono whitespace-nowrap" dir="ltr">
+                    <td className=" whitespace-nowrap" dir="ltr">
                       <OverflowTooltip
                         text={license.customer?.company || "-"}
                         className="max-w-[130px]"
