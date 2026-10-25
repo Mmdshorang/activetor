@@ -460,6 +460,51 @@ router.patch("/:id/activation", async (req, res) => {
   }
 });
 
+router.patch("/:id/license-limit/increase", async (req, res) => {
+  try {
+    if (!isAdmin(req)) {
+      return res.status(403).json({ message: "فقط ادمین می‌تواند ظرفیت لایسنس را افزایش دهد" });
+    }
+
+    const customerId = Number(req.params.id);
+    if (!Number.isInteger(customerId) || customerId < 1) {
+      return res.status(400).json({ message: "شناسه مشتری معتبر نیست" });
+    }
+
+    const info = await db.sequelize.transaction(async (transaction) => {
+      const customer = await db.Customer.findByPk(customerId, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+      if (!customer) return null;
+
+      // Increment in the database so concurrent requests cannot lose an addition.
+      await customer.increment("licenseLimit", { by: 1, transaction });
+      await customer.reload({ transaction });
+      const count = await db.License.count({
+        where: { customerId: customer.id },
+        transaction,
+      });
+
+      return {
+        customerId: customer.id,
+        limit: customer.licenseLimit,
+        count,
+        remaining: Math.max(customer.licenseLimit - count, 0),
+      };
+    });
+
+    if (!info) {
+      return res.status(404).json({ message: "مشتری یافت نشد" });
+    }
+    return res.json(info);
+  } catch (error) {
+    return res.status(500).json({
+      message: parseApiError(error, "خطا در افزایش ظرفیت لایسنس"),
+    });
+  }
+});
+
 router.get("/:id/license-info", async (req, res) => {
   try {
     const customer = await db.Customer.findByPk(req.params.id);

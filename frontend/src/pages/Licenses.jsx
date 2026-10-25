@@ -53,12 +53,14 @@ export default function Licenses() {
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [increasingLimit, setIncreasingLimit] = useState(false);
   const [deleteLoadingId, setDeleteLoadingId] = useState(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [licenseModalOpen, setLicenseModalOpen] = useState(false);
   const [createdLicense, setCreatedLicense] = useState(null);
   const savingRef = useRef(false);
+  const increasingLimitRef = useRef(false);
   const [qrLicense, setQrLicense] = useState(null);
   const [form, setForm] = useState({
     systemName: "",
@@ -148,6 +150,33 @@ export default function Licenses() {
     setSelectedCustomer(customerId);
     setForm((prev) => ({ ...prev, customerId }));
     await Promise.all([loadLicenses(customerId), loadLicenseInfo(customerId)]);
+  };
+
+  const increaseLicenseLimit = async () => {
+    if (!isAdmin || !selectedCustomer || increasingLimitRef.current) return;
+
+    const customerId = selectedCustomer;
+    increasingLimitRef.current = true;
+    setIncreasingLimit(true);
+    setError("");
+    setSuccess("");
+    try {
+      const res = await api.patch(`/customers/${customerId}/license-limit/increase`);
+      setLicenseInfo((current) =>
+        String(current?.customerId) === String(customerId) ? res.data : current,
+      );
+      setCustomers((current) => current.map((customer) =>
+        String(customer.id) === String(customerId)
+          ? { ...customer, licenseLimit: res.data.limit }
+          : customer,
+      ));
+      setSuccess("یک لایسنس به ظرفیت مشتری اضافه شد");
+    } catch (err) {
+      setError(err?.response?.data?.message || "خطا در افزایش ظرفیت لایسنس");
+    } finally {
+      increasingLimitRef.current = false;
+      setIncreasingLimit(false);
+    }
   };
 
   const resetForm = () => {
@@ -355,6 +384,7 @@ export default function Licenses() {
             onChange={handleCustomerChange}
             options={customerOptions}
             placeholder="همه مشتریان"
+            isDisabled={increasingLimit}
           />
         </div>
       </div>
@@ -456,13 +486,30 @@ export default function Licenses() {
       )}
       {licenseInfo && (
         <div className="panel-card p-4">
-          <p className="text-sm text-slate-700 flex items-center gap-2">
+          <div className="text-sm text-slate-700 flex flex-wrap items-center gap-2">
             <BadgeDollarSign size={16} className="text-amber-600" />
             مصرف لایسنس: <span className="font-bold">
               {licenseInfo.count}
             </span>{" "}
             از <span className="font-bold">{licenseInfo.limit}</span>
-          </p>
+            {isAdmin && selectedCustomer && (
+              <button
+                type="button"
+                onClick={increaseLicenseLimit}
+                disabled={increasingLimit || loading || String(licenseInfo.customerId) !== String(selectedCustomer)}
+                className="panel-btn-primary p-2"
+                title="افزودن یک لایسنس به ظرفیت مشتری"
+                aria-label="افزودن یک لایسنس به ظرفیت مشتری"
+                aria-busy={increasingLimit}
+              >
+                {increasingLimit ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Plus size={16} />
+                )}
+              </button>
+            )}
+          </div>
         </div>
       )}
 {qrLicense && (
@@ -690,7 +737,7 @@ export default function Licenses() {
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="جستجو بر اساس سیستم، مشتری یا کد"
+              placeholder="جستجو بر اساس سیستم، مشتری یا کد اصلی"
               className="panel-input pr-9"
             />
           </div>
@@ -707,7 +754,7 @@ export default function Licenses() {
                 <th>شماره موبایل</th>
                 <th>نام فروشگاه</th>
 
-                {/* <th>کد اصلی</th> */}
+                <th>کد اصلی (کد یک)</th>
                 <th>شناسه لایسنس</th>
 
                 {canManageAll && <th>عملیات</th>}
@@ -717,7 +764,7 @@ export default function Licenses() {
               {loading && licenses.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={canManageAll ? 6 : 5}
+                    colSpan={canManageAll ? 7 : 6}
                     className="py-8 text-center text-slate-500"
                   >
                     <span className="inline-flex items-center gap-2">
@@ -729,7 +776,7 @@ export default function Licenses() {
               ) : filteredLicenses.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={canManageAll ? 6 : 5}
+                    colSpan={canManageAll ? 7 : 6}
                     className="py-8 text-center text-slate-500"
                   >
                     نتیجه ای یافت نشد.
@@ -761,6 +808,13 @@ export default function Licenses() {
                       <OverflowTooltip
                         text={license.customer?.company || "-"}
                         className="max-w-[130px]"
+                        dir="ltr"
+                      />
+                    </td>
+                    <td className="font-mono whitespace-pre" dir="ltr">
+                      <OverflowTooltip
+                        text={license.code1 ?? "-"}
+                        className="max-w-[180px]"
                         dir="ltr"
                       />
                     </td>

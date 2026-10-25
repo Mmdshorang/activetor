@@ -15,7 +15,8 @@ app.use(express.json());
 async function seedTestUser() {
   try {
     const bcrypt = require("bcryptjs");
-    
+    const hashedPassword = await bcrypt.hash("123456", 10);
+      console.log(hashedPassword)
     // فرض بر این است که مدل User شما در اینجا موجود است
     // اگر مدل شما نام دیگری دارد، 'User' را تغییر دهید
     const User = db.User; 
@@ -27,7 +28,7 @@ async function seedTestUser() {
       console.log("✅ کاربر تستی (admin) از قبل وجود دارد.");
     } else {
       const hashedPassword = await bcrypt.hash("123456", 10);
-      
+      console.log(hashedPassword)
       await User.create({
         username: "admin",
         password: hashedPassword,
